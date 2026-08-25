@@ -597,12 +597,18 @@
                     body: formData
                 });
                 
-                if (!response.ok) {
-                    const err = await response.json();
-                    throw new Error(err.detail || 'Analysis failed');
+                let data;
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    throw new Error(`Server error: ${text}`);
                 }
                 
-                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || data.message || 'Analysis failed');
+                }
                 
                 if (selectedFiles.length === 1) {
                     displaySingleResult(data);
@@ -613,7 +619,8 @@
                 resultsSection.classList.add('visible');
                 
             } catch (err) {
-                showError(err.message);
+                console.error('Analysis error:', err);
+                showError(err.message || String(err));
             } finally {
                 analyzeBtn.disabled = false;
                 analyzeBtn.classList.remove('loading');
@@ -667,7 +674,7 @@
                                 <span class="batch-name">${r.filename}</span>
                             </div>
                             <span class="batch-error">
-                                ${r.status} | Error: ${r.reconstruction_error.toFixed(4)} | Conf: ${(r.confidence * 100).toFixed(1)}%
+                                ${r.status} | Recon. Error: ${r.reconstruction_error.toFixed(4)} | Confidence: ${(r.confidence * 100).toFixed(1)}%
                             </span>
                         </div>
                     `;
