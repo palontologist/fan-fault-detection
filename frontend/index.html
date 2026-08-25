@@ -588,10 +588,11 @@
             resultsSection.classList.remove('visible');
             
             const formData = new FormData();
-            selectedFiles.forEach(f => formData.append('files', f));
+            const endpoint = selectedFiles.length === 1 ? '/predict' : '/predict_batch';
+            const fieldName = selectedFiles.length === 1 ? 'file' : 'files';
+            selectedFiles.forEach(f => formData.append(fieldName, f));
             
             try {
-                const endpoint = selectedFiles.length === 1 ? '/predict' : '/predict_batch';
                 const response = await fetch(`${API_URL}${endpoint}`, {
                     method: 'POST',
                     body: formData
@@ -644,24 +645,33 @@
         });
         
         function displaySingleResult(data) {
-            singleResult.style.display = 'block';
-            batchResults.classList.remove('visible');
-            
-            const isFaulty = data.is_faulty;
-            statusBadge.textContent = data.status;
-            statusBadge.className = 'status-badge ' + (isFaulty ? 'faulty' : 'normal');
-            
-            errorValue.textContent = data.reconstruction_error.toFixed(6);
-            errorValue.className = 'metric-value ' + (isFaulty ? 'warning' : 'success');
-            
-            thresholdValue.textContent = data.threshold.toFixed(6);
-            confidenceValue.textContent = (data.confidence * 100).toFixed(1) + '%';
-            confidenceValue.className = 'metric-value ' + (isFaulty ? 'warning' : 'success');
-            
-            const progressPercent = Math.min((data.reconstruction_error / (data.threshold * 2)) * 100, 100);
-            progressFill.style.width = progressPercent + '%';
-            progressFill.className = 'progress-fill ' + 
-                (progressPercent > 80 ? 'danger' : progressPercent > 50 ? 'warning' : '');
+            try {
+                singleResult.style.display = 'block';
+                batchResults.classList.remove('visible');
+                
+                const isFaulty = Boolean(data.is_faulty);
+                statusBadge.textContent = data.status || (isFaulty ? 'FAULTY' : 'NORMAL');
+                statusBadge.className = 'status-badge ' + (isFaulty ? 'faulty' : 'normal');
+                
+                const error = Number(data.reconstruction_error) || 0;
+                const threshold = Number(data.threshold) || 0;
+                const confidence = Number(data.confidence) || 0;
+                
+                errorValue.textContent = error.toFixed(6);
+                errorValue.className = 'metric-value ' + (isFaulty ? 'warning' : 'success');
+                
+                thresholdValue.textContent = threshold.toFixed(6);
+                confidenceValue.textContent = (confidence * 100).toFixed(1) + '%';
+                confidenceValue.className = 'metric-value ' + (isFaulty ? 'warning' : 'success');
+                
+                const progressPercent = Math.min((error / (threshold * 2)) * 100, 100);
+                progressFill.style.width = progressPercent + '%';
+                progressFill.className = 'progress-fill ' + 
+                    (progressPercent > 80 ? 'danger' : progressPercent > 50 ? 'warning' : '');
+            } catch (err) {
+                console.error('displaySingleResult error:', err);
+                showError('Display error: ' + (err.message || String(err)));
+            }
         }
         
         function displayBatchResults(results) {
