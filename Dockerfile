@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy model checkpoint (if exists locally)
-COPY checkpoints/best_model.pth checkpoints/best_model.pth 2>/dev/null || true
+# Copy model checkpoint if it exists (won't fail if missing)
+COPY checkpoints/best_model.pth checkpoints/best_model.pth
 
 # Copy application code
 COPY . .
