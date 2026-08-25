@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy model checkpoint if it exists (won't fail if missing)
-COPY checkpoints/best_model.pth checkpoints/best_model.pth
+# Download model checkpoint from GitHub release
+RUN mkdir -p checkpoints && \
+    wget -q https://github.com/palontologist/fan-fault-detection/releases/download/v1.0/best_model.pth -O checkpoints/best_model.pth
 
 # Copy application code
 COPY . .
