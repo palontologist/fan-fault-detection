@@ -1,0 +1,78 @@
+project:
+  name: "fan-fault-detection"
+  version: "1.0.0"
+  description: "Fan fault detection from audio using deep learning"
+
+data:
+  datasets:
+    - name: "kaggle_fan_anomaly"
+      url: "https://www.kaggle.com/datasets/vuppalaadithyasairam/anomaly-detection-from-sound-data-fan"
+      type: "kaggle"
+      split: "train"
+    - name: "mimii_fan"
+      url: "https://zenodo.org/records/3384388"
+      type: "zenodo"
+      machine_type: "fan"
+    - name: "dcase2022_fan"
+      url: "https://zenodo.org/records/6355122"
+      type: "zenodo"
+      machine_type: "fan"
+
+  audio:
+    sample_rate: 16000
+    n_mels: 128
+    n_fft: 1024
+    hop_length: 512
+    duration: 10.0
+    n_frames: 313
+
+  preprocessing:
+    normalize: true
+    augment:
+      enabled: true
+      noise_factor: 0.005
+      time_stretch: 0.2
+      pitch_shift: 2
+
+training:
+  model:
+    type: "autoencoder"
+    architecture: "cnn_autoencoder"
+    latent_dim: 128
+    dropout: 0.3
+
+  hyperparameters:
+    batch_size: 32
+    epochs: 100
+    learning_rate: 0.001
+    weight_decay: 1e-5
+    scheduler: "cosine"
+    early_stopping_patience: 15
+    gradient_clip: 1.0
+
+  loss:
+    type: "mse"
+    anomaly_threshold_percentile: 95
+
+  device: "cuda"
+  num_workers: 4
+  seed: 42
+
+evaluation:
+  metrics:
+    - "auc"
+    - "pauc"
+    - "precision"
+    - "recall"
+    - "f1"
+  threshold_method: "percentile"
+
+frontend:
+  host: "0.0.0.0"
+  port: 8000
+  max_file_size: 10485760
+  allowed_extensions:
+    - ".wav"
+    - ".mp3"
+    - ".flac"
+    - ".ogg"
