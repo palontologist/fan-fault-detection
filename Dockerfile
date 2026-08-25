@@ -12,14 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download model checkpoint from GitHub release
-RUN python -c "
-import urllib.request
-import os
-os.makedirs('checkpoints', exist_ok=True)
-url = 'https://github.com/palontologist/fan-fault-detection/releases/download/v1.0/best_model.pth'
-urllib.request.urlretrieve(url, 'checkpoints/best_model.pth')
-print('Model downloaded successfully')
-"
+RUN python -c "import urllib.request, os; os.makedirs('checkpoints', exist_ok=True); urllib.request.urlretrieve('https://github.com/palontologist/fan-fault-detection/releases/download/v1.0/best_model.pth', 'checkpoints/best_model.pth')"
 
 # Copy application code
 COPY . .
