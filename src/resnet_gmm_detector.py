@@ -204,6 +204,19 @@ class ResNetAnomalyDetector:
         
         return self.threshold
     
+    def predict_scores(self, waveforms):
+        """Get anomaly scores without thresholding"""
+        if not self.is_fitted:
+            raise ValueError("Detector not fitted. Call fit() first.")
+        
+        features = self.extract_features_batch(waveforms)
+        features_scaled = self.scaler.transform(features)
+        
+        if self.detector_type == 'gmm':
+            return -self.detector.score_samples(features_scaled)
+        else:
+            return -self.detector.decision_function(features_scaled)
+    
     def predict(self, waveforms):
         """Predict anomaly scores"""
         if not self.is_fitted:
