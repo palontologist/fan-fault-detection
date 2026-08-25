@@ -597,17 +597,19 @@
                     body: formData
                 });
                 
-                let data;
-                const contentType = response.headers.get('content-type');
-                if (contentType && contentType.includes('application/json')) {
-                    data = await response.json();
-                } else {
-                    const text = await response.text();
-                    throw new Error(`Server error: ${text}`);
+                let data = null;
+                let responseText = '';
+                
+                try {
+                    responseText = await response.text();
+                    data = JSON.parse(responseText);
+                } catch (parseErr) {
+                    throw new Error(`Server returned invalid response: ${responseText.substring(0, 200)}`);
                 }
                 
                 if (!response.ok) {
-                    throw new Error(data.detail || data.message || 'Analysis failed');
+                    const msg = data?.detail || data?.message || `HTTP ${response.status}: ${responseText.substring(0, 200)}`;
+                    throw new Error(msg);
                 }
                 
                 if (selectedFiles.length === 1) {
@@ -620,7 +622,8 @@
                 
             } catch (err) {
                 console.error('Analysis error:', err);
-                showError(err.message || String(err));
+                const errorMsg = err.message || String(err);
+                showError(errorMsg);
             } finally {
                 analyzeBtn.disabled = false;
                 analyzeBtn.classList.remove('loading');
