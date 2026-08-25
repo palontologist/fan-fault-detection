@@ -12,8 +12,14 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download model checkpoint from GitHub release
-RUN mkdir -p checkpoints && \
-    wget -q https://github.com/palontologist/fan-fault-detection/releases/download/v1.0/best_model.pth -O checkpoints/best_model.pth
+RUN python -c "
+import urllib.request
+import os
+os.makedirs('checkpoints', exist_ok=True)
+url = 'https://github.com/palontologist/fan-fault-detection/releases/download/v1.0/best_model.pth'
+urllib.request.urlretrieve(url, 'checkpoints/best_model.pth')
+print('Model downloaded successfully')
+"
 
 # Copy application code
 COPY . .
