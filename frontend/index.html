@@ -597,18 +597,20 @@
                     body: formData
                 });
                 
-                let data = null;
                 let responseText = '';
+                let data = null;
                 
                 try {
                     responseText = await response.text();
+                    console.log('Raw response:', responseText.substring(0, 500));
                     data = JSON.parse(responseText);
                 } catch (parseErr) {
-                    throw new Error(`Server returned invalid response: ${responseText.substring(0, 200)}`);
+                    console.error('Parse error:', parseErr, 'Response:', responseText);
+                    throw new Error(`Server returned invalid JSON: ${responseText.substring(0, 300)}`);
                 }
                 
                 if (!response.ok) {
-                    const msg = data?.detail || data?.message || `HTTP ${response.status}: ${responseText.substring(0, 200)}`;
+                    const msg = data?.detail || data?.message || data?.error || `HTTP ${response.status}: ${responseText.substring(0, 300)}`;
                     throw new Error(msg);
                 }
                 
@@ -621,9 +623,20 @@
                 resultsSection.classList.add('visible');
                 
             } catch (err) {
-                console.error('Analysis error:', err);
-                const errorMsg = err.message || String(err);
-                showError(errorMsg);
+                console.error('Analysis error:', err, err?.stack);
+                let errorMsg = '';
+                if (err instanceof Error) {
+                    errorMsg = err.message;
+                } else if (typeof err === 'object' && err !== null) {
+                    try {
+                        errorMsg = JSON.stringify(err);
+                    } catch {
+                        errorMsg = 'Unknown error object';
+                    }
+                } else {
+                    errorMsg = String(err);
+                }
+                showError(errorMsg || 'Unknown error occurred');
             } finally {
                 analyzeBtn.disabled = false;
                 analyzeBtn.classList.remove('loading');
