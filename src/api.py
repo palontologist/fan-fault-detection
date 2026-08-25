@@ -14,12 +14,13 @@ import uvicorn
 import io
 import os
 import random
+import re
 from scipy.io import wavfile
 
 from src.model import load_model, CNNAutoencoder
 
 
-app = FastAPI(title="Fan Fault Detection API", version="1.0.0")
+app = FastAPI(title="Fan Fault Detection API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,7 +33,9 @@ app.add_middleware(
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
-detector = None
+# Per-ID detectors
+detectors: Dict[str, CNNAutoencoder] = {}
+global_detector = None
 config = None
 DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() == "true"
 
@@ -43,12 +46,11 @@ def load_config(config_path: str = "config.yaml"):
         config = yaml.safe_load(f)
 
 
-def initialize_detector(model_path: str):
-    global detector, config
+def load_detector(model_path: str, device: torch.device):
+    """Load a single detector from checkpoint."""
     if config is None:
         load_config()
     
-    device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
     detector = load_model(model_path, config, device)
     
     checkpoint = torch.load(model_path, map_location=device)
@@ -63,6 +65,57 @@ def initialize_detector(model_path: str):
     detector.duration = config['data']['audio']['duration']
     
     return detector
+
+
+def extract_machine_id(filename: str) -> Optional[str]:
+    """Extract machine ID from MIMII filename."""
+    # Pattern: normal_id_00_00000000.wav or anomaly_id_04_00000000.wav
+    match = re.search(r'id_(\d{2})_', filename)
+    if match:
+        return match.group(1)
+    return None
+
+
+def load_all_detectors():
+    """Load all per-ID models and global model."""
+    global detectors, global_detector, config
+    
+    if config is None:
+        load_config()
+    
+    device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
+    checkpoint_dir = Path("checkpoints")
+    
+    # Load per-ID models
+    id_pattern = re.compile(r'best_model_id_(\d{2})\.pth')
+    for ckpt_file in checkpoint_dir.glob("best_model_id_*.pth"):
+        match = id_pattern.match(ckpt_file.name)
+        if match:
+            machine_id = match.group(1)
+            try:
+                detectors[machine_id] = load_detector(str(ckpt_file), device)
+                print(f"Loaded per-ID model for ID {machine_id} (threshold: {detectors[machine_id].threshold:.4f})")
+            except Exception as e:
+                print(f"Failed to load model for ID {machine_id}: {e}")
+    
+    # Load global model as fallback
+    global_model_path = checkpoint_dir / "best_model.pth"
+    if global_model_path.exists():
+        try:
+            global_detector = load_detector(str(global_model_path), device)
+            print(f"Loaded global fallback model (threshold: {global_detector.threshold:.4f})")
+        except Exception as e:
+            print(f"Failed to load global model: {e}")
+    
+    print(f"Total detectors loaded: {len(detectors)} per-ID + {'global' if global_detector else 'no global'}")
+
+
+def get_detector_for_file(filename: str):
+    """Get the appropriate detector for a filename."""
+    machine_id = extract_machine_id(filename)
+    if machine_id and machine_id in detectors:
+        return detectors[machine_id], machine_id
+    return global_detector, "global"
 
 
 def preprocess_audio(waveform: torch.Tensor, sr: int, config: dict) -> torch.Tensor:
@@ -96,21 +149,22 @@ def preprocess_audio(waveform: torch.Tensor, sr: int, config: dict) -> torch.Ten
 
 @app.on_event("startup")
 async def startup_event():
-    model_path = os.environ.get("MODEL_PATH", "checkpoints/best_model.pth")
-    if os.path.exists(model_path):
-        initialize_detector(model_path)
-        print(f"Model loaded from {model_path}")
-    elif DEMO_MODE:
-        print("Running in DEMO MODE - no model loaded, returning mock predictions")
-    else:
-        print(f"Warning: Model not found at {model_path}")
+    if DEMO_MODE:
+        print("Running in DEMO MODE - no models loaded")
+        return
+    
+    load_all_detectors()
+    if not detectors and not global_detector:
+        print("Warning: No models loaded!")
 
 
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
-        "model_loaded": detector is not None
+        "per_id_models_loaded": len(detectors),
+        "global_model_loaded": global_detector is not None,
+        "available_ids": sorted(detectors.keys())
     }
 
 
@@ -120,145 +174,112 @@ async def serve_frontend():
     return FileResponse(index_path)
 
 
-@app.post("/predict")
-async def predict(file: UploadFile = File(...), demo: bool = Query(False)):
-    if detector is None and not (DEMO_MODE or demo):
-        raise HTTPException(status_code=503, detail="Model not loaded")
-    
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="No file provided")
-    
-    if DEMO_MODE or demo:
-        await file.read()
+def run_inference(detector, filename: str, contents: bytes, config: dict, demo: bool = False):
+    """Run inference with a specific detector."""
+    if demo:
         is_faulty = random.random() > 0.7
         error = random.uniform(0.001, 0.02) if is_faulty else random.uniform(0.0001, 0.005)
         threshold = 0.005
         confidence = min(error / (threshold * 2), 1.0)
-        
         return {
-            "filename": file.filename,
+            "filename": filename,
             "is_faulty": is_faulty,
             "reconstruction_error": error,
             "threshold": threshold,
             "confidence": confidence,
             "status": "FAULTY" if is_faulty else "NORMAL",
+            "model_used": "demo",
             "demo": True
         }
     
     if config is None:
         load_config()
     
-    allowed_extensions = config['frontend']['allowed_extensions']
-    file_ext = Path(file.filename).suffix.lower()
-    if file_ext not in allowed_extensions:
-        raise HTTPException(
-            status_code=400,
-            detail=f"File type not allowed. Allowed: {allowed_extensions}"
-        )
+    # Load audio with scipy
+    sr, waveform_np = wavfile.read(io.BytesIO(contents))
     
-    try:
-        contents = await file.read()
-        
-        # Load audio with scipy
-        sr, waveform_np = wavfile.read(io.BytesIO(contents))
-        
-        # Convert to float32 normalized
-        if waveform_np.dtype == np.int16:
-            waveform_np = waveform_np.astype(np.float32) / 32768.0
-        elif waveform_np.dtype == np.int32:
-            waveform_np = waveform_np.astype(np.float32) / 2147483648.0
-        else:
-            waveform_np = waveform_np.astype(np.float32)
-        
-        # Handle stereo
-        if len(waveform_np.shape) > 1:
-            waveform_np = waveform_np.mean(axis=1)
-        
-        waveform = torch.from_numpy(waveform_np).unsqueeze(0)
-        
-        mel_spec = preprocess_audio(waveform, sr, config).to(detector.device)
-        
-        with torch.no_grad():
-            reconstructed, latent = detector(mel_spec)
-            error = detector.get_reconstruction_error(mel_spec).item()
-            
-            is_faulty = error > detector.threshold
-            confidence = min(error / (detector.threshold * 2), 1.0) if detector.threshold > 0 else 0.5
-        
-        return {
-            "filename": file.filename,
-            "is_faulty": bool(is_faulty),
-            "reconstruction_error": error,
-            "threshold": detector.threshold,
-            "confidence": confidence,
-            "status": "FAULTY" if is_faulty else "NORMAL"
-        }
+    # Convert to float32 normalized
+    if waveform_np.dtype == np.int16:
+        waveform_np = waveform_np.astype(np.float32) / 32768.0
+    elif waveform_np.dtype == np.int32:
+        waveform_np = waveform_np.astype(np.float32) / 2147483648.0
+    else:
+        waveform_np = waveform_np.astype(np.float32)
     
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Processing error: {str(e)}")
+    # Handle stereo
+    if len(waveform_np.shape) > 1:
+        waveform_np = waveform_np.mean(axis=1)
+    
+    waveform = torch.from_numpy(waveform_np).unsqueeze(0)
+    
+    mel_spec = preprocess_audio(waveform, sr, config).to(detector.device)
+    
+    with torch.no_grad():
+        reconstructed, latent = detector(mel_spec)
+        error = detector.get_reconstruction_error(mel_spec).item()
+        
+        is_faulty = error > detector.threshold
+        confidence = min(error / (detector.threshold * 2), 1.0) if detector.threshold > 0 else 0.5
+    
+    return {
+        "filename": filename,
+        "is_faulty": bool(is_faulty),
+        "reconstruction_error": error,
+        "threshold": detector.threshold,
+        "confidence": confidence,
+        "status": "FAULTY" if is_faulty else "NORMAL",
+        "model_used": "per_id" if hasattr(detector, '_machine_id') else "global"
+    }
+
+
+@app.post("/predict")
+async def predict(file: UploadFile = File(...), demo: bool = Query(False)):
+    if not detectors and not global_detector and not (DEMO_MODE or demo):
+        raise HTTPException(status_code=503, detail="No models loaded")
+    
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    contents = await file.read()
+    
+    # Get appropriate detector
+    detector, model_used = get_detector_for_file(file.filename)
+    
+    if detector is None and not (DEMO_MODE or demo):
+        raise HTTPException(status_code=503, detail="No suitable model found")
+    
+    # Set model_used for tracking
+    detector._machine_id = model_used
+    
+    result = run_inference(detector, file.filename, contents, config, demo)
+    result["model_used"] = model_used
+    return result
 
 
 @app.post("/predict_batch")
 async def predict_batch(files: list[UploadFile] = File(...), demo: bool = Query(False)):
-    if detector is None and not (DEMO_MODE or demo):
-        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not detectors and not global_detector and not (DEMO_MODE or demo):
+        raise HTTPException(status_code=503, detail="No models loaded")
     
     results = []
     for file in files:
         try:
-            if DEMO_MODE or demo:
-                await file.read()
-                is_faulty = random.random() > 0.7
-                error = random.uniform(0.001, 0.02) if is_faulty else random.uniform(0.0001, 0.005)
-                threshold = 0.005
-                confidence = min(error / (threshold * 2), 1.0)
-                
+            contents = await file.read()
+            
+            # Get appropriate detector per file
+            detector, model_used = get_detector_for_file(file.filename)
+            
+            if detector is None and not (DEMO_MODE or demo):
                 results.append({
                     "filename": file.filename,
-                    "is_faulty": is_faulty,
-                    "reconstruction_error": error,
-                    "threshold": threshold,
-                    "confidence": confidence,
-                    "status": "FAULTY" if is_faulty else "NORMAL",
-                    "demo": True
+                    "error": "No suitable model found"
                 })
-            else:
-                contents = await file.read()
-                
-                # Load audio with scipy
-                sr, waveform_np = wavfile.read(io.BytesIO(contents))
-                
-                # Convert to float32 normalized
-                if waveform_np.dtype == np.int16:
-                    waveform_np = waveform_np.astype(np.float32) / 32768.0
-                elif waveform_np.dtype == np.int32:
-                    waveform_np = waveform_np.astype(np.float32) / 2147483648.0
-                else:
-                    waveform_np = waveform_np.astype(np.float32)
-                
-                # Handle stereo
-                if len(waveform_np.shape) > 1:
-                    waveform_np = waveform_np.mean(axis=1)
-                
-                waveform = torch.from_numpy(waveform_np).unsqueeze(0)
-                
-                mel_spec = preprocess_audio(waveform, sr, config).to(detector.device)
-                
-                with torch.no_grad():
-                    reconstructed, latent = detector(mel_spec)
-                    error = detector.get_reconstruction_error(mel_spec).item()
-                    
-                    is_faulty = error > detector.threshold
-                    confidence = min(error / (detector.threshold * 2), 1.0) if detector.threshold > 0 else 0.5
-                
-                results.append({
-                    "filename": file.filename,
-                    "is_faulty": bool(is_faulty),
-                    "reconstruction_error": error,
-                    "threshold": detector.threshold,
-                    "confidence": confidence,
-                    "status": "FAULTY" if is_faulty else "NORMAL"
-                })
+                continue
+            
+            detector._machine_id = model_used
+            result = run_inference(detector, file.filename, contents, config, demo)
+            result["model_used"] = model_used
+            results.append(result)
         except Exception as e:
             results.append({
                 "filename": file.filename,
@@ -270,13 +291,17 @@ async def predict_batch(files: list[UploadFile] = File(...), demo: bool = Query(
 
 @app.get("/threshold")
 async def get_threshold():
-    if detector is None and not DEMO_MODE:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not detectors and not global_detector and not DEMO_MODE:
+        raise HTTPException(status_code=503, detail="No models loaded")
     
     if DEMO_MODE:
         return {"threshold": 0.005, "demo": True}
     
-    return {"threshold": detector.threshold}
+    # Return all thresholds
+    thresholds = {mid: det.threshold for mid, det in detectors.items()}
+    if global_detector:
+        thresholds["global"] = global_detector.threshold
+    return {"thresholds": thresholds}
 
 
 if __name__ == "__main__":
