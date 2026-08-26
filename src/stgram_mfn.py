@@ -15,11 +15,12 @@ import math
 
 class TgramNet(nn.Module):
     """Temporal feature extraction network (TgramNet) from raw waveform"""
-    def __init__(self, n_mels=128, n_fft=1024, hop_length=512):
+    def __init__(self, n_mels=128, n_fft=1024, hop_length=512, target_frames=313):
         super().__init__()
         self.n_mels = n_mels
         self.n_fft = n_fft
         self.hop_length = hop_length
+        self.target_frames = target_frames
         
         # Large kernel 1D conv matching Mel spectrogram parameters
         self.conv1 = nn.Sequential(
@@ -46,10 +47,14 @@ class TgramNet(nn.Module):
     def forward(self, x):
         """
         x: (batch, 1, waveform_length)
-        Returns: Tgram (batch, n_mels, n_frames)
+        Returns: Tgram (batch, n_mels, target_frames)
         """
         tgram = self.conv1(x)
         tgram = self.blocks(tgram)
+        
+        # Ensure target frame count
+        if tgram.shape[-1] != self.target_frames:
+            tgram = F.interpolate(tgram, size=self.target_frames, mode='linear', align_corners=False)
         return tgram
 
 
@@ -79,10 +84,11 @@ class SgramExtractor(nn.Module):
 
 class STgramFusion(nn.Module):
     """Spectral-Temporal Fusion (STgram) - concatenates Sgram and Tgram"""
-    def __init__(self, sample_rate=16000, n_mels=128, n_fft=1024, hop_length=512):
+    def __init__(self, sample_rate=16000, n_mels=128, n_fft=1024, hop_length=512, target_frames=313):
         super().__init__()
         self.sgram_extractor = SgramExtractor(sample_rate, n_mels, n_fft, hop_length)
-        self.tgram_net = TgramNet(n_mels, n_fft, hop_length)
+        self.tgram_net = TgramNet(n_mels, n_fft, hop_length, target_frames)
+        self.target_frames = target_frames
     
     def forward(self, x):
         """
