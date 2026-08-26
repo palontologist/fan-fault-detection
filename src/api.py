@@ -16,6 +16,8 @@ import os
 import random
 import re
 from scipy.io import wavfile
+from pydub import AudioSegment
+import io
 
 from src.model import load_model, CNNAutoencoder
 
@@ -195,24 +197,40 @@ def run_inference(detector, filename: str, contents: bytes, config: dict, demo: 
     if config is None:
         load_config()
     
-    # Load audio with scipy
-    sr, waveform_np = wavfile.read(io.BytesIO(contents))
+    # Load audio with pydub (supports MP3, WAV, FLAC, OGG, etc.)
+    try:
+        audio = AudioSegment.from_file(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Unsupported audio format: {str(e)}")
     
-    # Convert to float32 normalized
-    if waveform_np.dtype == np.int16:
-        waveform_np = waveform_np.astype(np.float32) / 32768.0
-    elif waveform_np.dtype == np.int32:
-        waveform_np = waveform_np.astype(np.float32) / 2147483648.0
+    # Convert to mono
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+    
+    # Set sample rate
+    audio = audio.set_frame_rate(config['data']['audio']['sample_rate'])
+    
+    # Convert to numpy array
+    waveform_np = np.array(audio.get_array_of_samples(), dtype=np.float32)
+    
+    # Normalize to [-1, 1]
+    if audio.sample_width == 2:  # 16-bit
+        waveform_np = waveform_np / 32768.0
+    elif audio.sample_width == 4:  # 32-bit
+        waveform_np = waveform_np / 2147483648.0
     else:
-        waveform_np = waveform_np.astype(np.float32)
+        waveform_np = waveform_np / (2**(audio.sample_width * 8 - 1))
     
-    # Handle stereo
-    if len(waveform_np.shape) > 1:
-        waveform_np = waveform_np.mean(axis=1)
+    # Pad/trim to target length
+    target_length = int(config['data']['audio']['sample_rate'] * config['data']['audio']['duration'])
+    if len(waveform_np) > target_length:
+        waveform_np = waveform_np[:target_length]
+    elif len(waveform_np) < target_length:
+        waveform_np = np.pad(waveform_np, (0, target_length - len(waveform_np)))
     
     waveform = torch.from_numpy(waveform_np).unsqueeze(0)
     
-    mel_spec = preprocess_audio(waveform, sr, config).to(detector.device)
+    mel_spec = preprocess_audio(waveform, config['data']['audio']['sample_rate'], config).to(detector.device)
     
     with torch.no_grad():
         reconstructed, latent = detector(mel_spec)
