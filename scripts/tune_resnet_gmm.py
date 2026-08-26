@@ -6,7 +6,7 @@ Use more normal samples, better threshold selection (Youden's J, F1-optimal)
 import torch
 import numpy as np
 from pathlib import Path
-from scipy.io import wavfile
+from pydub import AudioSegment
 import torchaudio.transforms as T
 from sklearn.mixture import GaussianMixture
 from sklearn.svm import OneClassSVM
@@ -78,8 +78,9 @@ def evaluate_with_optimal_thresholds(detector, test_wavs, test_labels):
 
 def train_and_evaluate_per_id(mid, detector_type='gmm', n_components=8, max_normal=100, max_test=30):
     """Train and evaluate detector for a specific machine ID"""
-    from pathlib import Path
-    from scipy.io import wavfile
+from pathlib import Path
+from pydub import AudioSegment
+import numpy as np
     
     normal_dir = Path('data/raw/mimii_fan/normal')
     anomaly_dir = Path('data/raw/mimii_fan/anomaly')
@@ -95,13 +96,30 @@ def train_and_evaluate_per_id(mid, detector_type='gmm', n_components=8, max_norm
     # Load normal waveforms for training
     train_wavs = []
     for f in normal_files[:max_normal]:
-        sr, wav = wavfile.read(f)
-        wav = wav.astype(np.float32) / 32768.0
-        if len(wav.shape) > 1: wav = wav.mean(axis=1)
+        try:
+            audio = AudioSegment.from_file(f)
+        except Exception as e:
+            print(f"  Warning: Failed to load {f}: {e}")
+            continue
+        
+        if audio.channels > 1:
+            audio = audio.set_channels(1)
+        audio = audio.set_frame_rate(16000)
+        
+        waveform_np = np.array(audio.get_array_of_samples(), dtype=np.float32)
+        if audio.sample_width == 2:
+            waveform_np = waveform_np.astype(np.float32) / 32768.0
+        elif audio.sample_width == 4:
+            waveform_np = waveform_np.astype(np.float32) / 2147483648.0
+        else:
+            waveform_np = waveform_np.astype(np.float32) / (2**(audio.sample_width * 8 - 1))
+        
         target_len = 160000
-        if len(wav) > target_len: wav = wav[:target_len]
-        elif len(wav) < target_len: wav = np.pad(wav, (0, target_len - len(wav)))
-        train_wavs.append(torch.from_numpy(wav))
+        if len(waveform_np) > target_len:
+            waveform_np = waveform_np[:target_len]
+        elif len(waveform_np) < target_len:
+            waveform_np = np.pad(waveform_np, (0, target_len - len(waveform_np)))
+        train_wavs.append(torch.from_numpy(waveform_np))
     
     # Train detector
     detector = ResNetAnomalyDetector(model_name='resnet18', detector_type=detector_type, n_components=8)
@@ -115,23 +133,57 @@ def train_and_evaluate_per_id(mid, detector_type='gmm', n_components=8, max_norm
     test_labels = []
     
     for f in list(normal_files)[50:70]:
-        sr, wav = wavfile.read(f)
-        wav = wav.astype(np.float32) / 32768.0
-        if len(wav.shape) > 1: wav = wav.mean(axis=1)
+        try:
+            audio = AudioSegment.from_file(f)
+        except Exception as e:
+            print(f"  Warning: Failed to load {f}: {e}")
+            continue
+            
+        if audio.channels > 1:
+            audio = audio.set_channels(1)
+        audio = audio.set_frame_rate(16000)
+        
+        waveform_np = np.array(audio.get_array_of_samples(), dtype=np.float32)
+        if audio.sample_width == 2:
+            waveform_np = waveform_np.astype(np.float32) / 32768.0
+        elif audio.sample_width == 4:
+            waveform_np = waveform_np.astype(np.float32) / 2147483648.0
+        else:
+            waveform_np = waveform_np.astype(np.float32) / (2**(audio.sample_width * 8 - 1))
+        
         target_len = 160000
-        if len(wav) > target_len: wav = wav[:target_len]
-        elif len(wav) < target_len: wav = np.pad(wav, (0, target_len - len(wav)))
-        test_wavs.append(torch.from_numpy(wav))
+        if len(waveform_np) > target_len:
+            waveform_np = waveform_np[:target_len]
+        elif len(waveform_np) < target_len:
+            waveform_np = np.pad(waveform_np, (0, target_len - len(waveform_np)))
+        test_wavs.append(torch.from_numpy(waveform_np))
         test_labels.append(0)
     
     for f in list(anomaly_files)[:20]:
-        sr, wav = wavfile.read(f)
-        wav = wav.astype(np.float32) / 32768.0
-        if len(wav.shape) > 1: wav = wav.mean(axis=1)
+        try:
+            audio = AudioSegment.from_file(f)
+        except Exception as e:
+            print(f"  Warning: Failed to load {f}: {e}")
+            continue
+            
+        if audio.channels > 1:
+            audio = audio.set_channels(1)
+        audio = audio.set_frame_rate(16000)
+        
+        waveform_np = np.array(audio.get_array_of_samples(), dtype=np.float32)
+        if audio.sample_width == 2:
+            waveform_np = waveform_np.astype(np.float32) / 32768.0
+        elif audio.sample_width == 4:
+            waveform_np = waveform_np.astype(np.float32) / 2147483648.0
+        else:
+            waveform_np = waveform_np.astype(np.float32) / (2**(audio.sample_width * 8 - 1))
+        
         target_len = 160000
-        if len(wav) > target_len: wav = wav[:target_len]
-        elif len(wav) < target_len: wav = np.pad(wav, (0, target_len - len(wav)))
-        test_wavs.append(torch.from_numpy(wav))
+        if len(waveform_np) > target_len:
+            waveform_np = waveform_np[:target_len]
+        elif len(waveform_np) < target_len:
+            waveform_np = np.pad(waveform_np, (0, target_len - len(waveform_np)))
+        test_wavs.append(torch.from_numpy(waveform_np))
         test_labels.append(1)
     
     # Evaluate with multiple thresholds

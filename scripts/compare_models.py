@@ -8,10 +8,11 @@ Test and compare anomaly detection approaches:
 import torch
 import torch.nn as nn
 import numpy as np
-from scipy.io import wavfile
 from pathlib import Path
 from collections import defaultdict
 import torchaudio.transforms as T
+from pydub import AudioSegment
+from pydub import AudioSegment
 
 # Import our implementations
 import sys
@@ -19,6 +20,41 @@ sys.path.append('/home/palontologist/Downloads/dev/fan-fault-detection/src')
 from stgram_mfn import STgramMFN, compute_anomaly_score
 from resnet_gmm_detector import ResNetAnomalyDetector, prepare_waveforms_from_dir, evaluate_detector
 from model import CNNAutoencoder
+
+
+def load_audio_file(filepath):
+    """Load audio file with pydub (supports MP3, WAV, FLAC, OGG, etc.)"""
+    try:
+        audio = AudioSegment.from_file(filepath)
+    except Exception as e:
+        raise RuntimeError(f"Failed to load audio file {filepath}: {e}")
+    
+    # Convert to mono
+    if audio.channels > 1:
+        audio = audio.set_channels(1)
+    
+    # Set sample rate
+    audio = audio.set_frame_rate(16000)
+    
+    # Convert to numpy array
+    waveform_np = np.array(audio.get_array_of_samples(), dtype=np.float32)
+    
+    # Normalize to [-1, 1]
+    if audio.sample_width == 2:  # 16-bit
+        waveform_np = waveform_np.astype(np.float32) / 32768.0
+    elif audio.sample_width == 4:  # 32-bit
+        waveform_np = waveform_np.astype(np.float32) / 2147483648.0
+    else:
+        waveform_np = waveform_np / (2**(audio.sample_width * 8 - 1))
+    
+    # Pad/trim to target length
+    target_len = 160000
+    if len(waveform_np) > target_len:
+        waveform_np = waveform_np[:target_len]
+    elif len(waveform_np) < target_len:
+        waveform_np = np.pad(waveform_np, (0, target_len - len(waveform_np)))
+    
+    return torch.from_numpy(waveform_np).unsqueeze(0)
 
 
 def load_waveforms_from_dir(data_dir, max_per_class=20):
@@ -34,30 +70,12 @@ def load_waveforms_from_dir(data_dir, max_per_class=20):
     filenames = []
     
     for f in normal_files:
-        sr, wav = wavfile.read(f)
-        wav = wav.astype(np.float32) / 32768.0
-        if len(wav.shape) > 1:
-            wav = wav.mean(axis=1)
-        target_len = 160000
-        if len(wav) > target_len:
-            wav = wav[:target_len]
-        elif len(wav) < target_len:
-            wav = np.pad(wav, (0, target_len - len(wav)))
-        waveforms.append(torch.from_numpy(wav))
+        waveforms.append(load_audio_file(f))
         labels.append(0)
         filenames.append(f.name)
     
     for f in anomaly_files:
-        sr, wav = wavfile.read(f)
-        wav = wav.astype(np.float32) / 32768.0
-        if len(wav.shape) > 1:
-            wav = wav.mean(axis=1)
-        target_len = 160000
-        if len(wav) > target_len:
-            wav = wav[:target_len]
-        elif len(wav) < target_len:
-            wav = np.pad(wav, (0, target_len - len(wav)))
-        waveforms.append(torch.from_numpy(wav))
+        waveforms.append(load_audio_file(f))
         labels.append(1)
         filenames.append(f.name)
     
@@ -242,30 +260,12 @@ def main():
         filenames = []
         
         for f in normal_files:
-            sr, wav = wavfile.read(f)
-            wav = wav.astype(np.float32) / 32768.0
-            if len(wav.shape) > 1:
-                wav = wav.mean(axis=1)
-            target_len = 160000
-            if len(wav) > target_len:
-                wav = wav[:target_len]
-            elif len(wav) < target_len:
-                wav = np.pad(wav, (0, target_len - len(wav)))
-            waveforms.append(torch.from_numpy(wav))
+            waveforms.append(load_audio_file(f))
             labels.append(0)
             filenames.append(f.name)
         
         for f in anomaly_files[:20]:
-            sr, wav = wavfile.read(f)
-            wav = wav.astype(np.float32) / 32768.0
-            if len(wav.shape) > 1:
-                wav = wav.mean(axis=1)
-            target_len = 160000
-            if len(wav) > target_len:
-                wav = wav[:target_len]
-            elif len(wav) < target_len:
-                wav = np.pad(wav, (0, target_len - len(wav)))
-            waveforms.append(torch.from_numpy(wav))
+            waveforms.append(load_audio_file(f))
             labels.append(1)
             filenames.append(f.name)
         

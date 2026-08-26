@@ -13,9 +13,10 @@ from torch.utils.data import DataLoader, Dataset
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+import yaml
 from scipy.io import wavfile
-import torchaudio
 import torchaudio.transforms as T
+from pydub import AudioSegment
 
 
 class FanAudioDataset(Dataset):
@@ -56,34 +57,37 @@ class FanAudioDataset(Dataset):
     def __getitem__(self, idx):
         filepath, label = self.files[idx]
         
-        # Load with scipy
-        sr, waveform_np = wavfile.read(filepath)
+        # Load with pydub (supports MP3, WAV, FLAC, OGG, etc.)
+        try:
+            audio = AudioSegment.from_file(filepath)
+        except Exception as e:
+            raise RuntimeError(f"Failed to load audio file {filepath}: {e}")
         
-        # Convert to float32 normalized
-        if waveform_np.dtype == np.int16:
+        # Convert to mono
+        if audio.channels > 1:
+            audio = audio.set_channels(1)
+        
+        # Set sample rate
+        audio = audio.set_frame_rate(self.sample_rate)
+        
+        # Convert to numpy array
+        waveform_np = np.array(audio.get_array_of_samples(), dtype=np.float32)
+        
+        # Normalize to [-1, 1]
+        if audio.sample_width == 2:  # 16-bit
             waveform_np = waveform_np.astype(np.float32) / 32768.0
-        elif waveform_np.dtype == np.int32:
+        elif audio.sample_width == 4:  # 32-bit
             waveform_np = waveform_np.astype(np.float32) / 2147483648.0
         else:
-            waveform_np = waveform_np.astype(np.float32)
+            waveform_np = waveform_np / (2**(audio.sample_width * 8 - 1))
         
-        # Handle stereo
-        if len(waveform_np.shape) > 1:
-            waveform_np = waveform_np.mean(axis=1)
+        # Pad/trim to target length
+        if len(waveform_np) > self.target_length:
+            waveform_np = waveform_np[:self.target_length]
+        elif len(waveform_np) < self.target_length:
+            waveform_np = np.pad(waveform_np, (0, self.target_length - len(waveform_np)))
         
         waveform = torch.from_numpy(waveform_np).unsqueeze(0)
-        
-        # Resample if needed
-        if sr != self.sample_rate:
-            resampler = T.Resample(sr, self.sample_rate)
-            waveform = resampler(waveform)
-        
-        # Pad/trim
-        if waveform.shape[1] > self.target_length:
-            waveform = waveform[:, :self.target_length]
-        elif waveform.shape[1] < self.target_length:
-            padding = self.target_length - waveform.shape[1]
-            waveform = torch.nn.functional.pad(waveform, (0, padding))
         
         # Mel spectrogram
         mel_spec = self.mel_transform(waveform)
@@ -92,7 +96,6 @@ class FanAudioDataset(Dataset):
         # Normalize per sample
         mel_spec = (mel_spec - mel_spec.mean()) / (mel_spec.std() + 1e-8)
         
-        # mel_spec is [1, n_mels, time], return as is (batch dim added by DataLoader)
         return mel_spec, torch.tensor(label, dtype=torch.long)
 
 
