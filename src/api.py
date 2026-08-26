@@ -92,13 +92,9 @@ def get_stgram_detector():
     if not model_path.exists():
         raise HTTPException(status_code=503, detail="Model checkpoint not found")
     
-    try:
-        global stgram_detector
-        stgram_detector = load_stgram_detector(str(model_path), device)
-        print(f"Loaded STgram-MFN model (threshold: {stgram_detector.threshold:.4f})")
-        return stgram_detector
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Failed to load model: {e}")
+    stgram_detector = load_stgram_detector(str(model_path), device)
+    print(f"Loaded STgram-MFN model (threshold: {stgram_detector.threshold:.4f})")
+    return stgram_detector
 
 
 @app.on_event("startup")
