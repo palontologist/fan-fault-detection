@@ -12,10 +12,10 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download model checkpoints from GitHub release
-RUN python -c "import urllib.request, os; os.makedirs('checkpoints', exist_ok=True); urllib.request.urlretrieve('https://github.com/palontologist/fan-fault-detection/releases/download/v2.0.1/best_model.pth', 'checkpoints/best_model.pth')"
+# Download model checkpoints from GitHub release (v2.2.0 - optimal thresholds)
+RUN python -c "import urllib.request, os; os.makedirs('checkpoints', exist_ok=True); urllib.request.urlretrieve('https://github.com/palontologist/fan-fault-detection/releases/download/v2.2.0/best_model.pth', 'checkpoints/best_model.pth')"
 # Download per-ID models
-RUN for i in 00 01 02 03 04 05 06; do python -c "import urllib.request, os; os.makedirs('checkpoints', exist_ok=True); urllib.request.urlretrieve('https://github.com/palontologist/fan-fault-detection/releases/download/v2.0.1/best_model_id_${i}.pth', 'checkpoints/best_model_id_${i}.pth')"; done
+RUN for i in 00 01 02 03 04 05 06; do python -c "import urllib.request, os; os.makedirs('checkpoints', exist_ok=True); urllib.request.urlretrieve('https://github.com/palontologist/fan-fault-detection/releases/download/v2.2.0/best_model_id_${i}.pth', 'checkpoints/best_model_id_${i}.pth')"; done
 
 # Copy application code
 COPY . .
