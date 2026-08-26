@@ -2,9 +2,10 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (including ffmpeg for pydub MP3/FLAC/OGG support)
 RUN apt-get update && apt-get install -y \
     libstdc++6 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
