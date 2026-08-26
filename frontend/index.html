@@ -302,7 +302,210 @@
         .progress-fill.danger {
             background: linear-gradient(90deg, #ff4757 0%, #c44569 100%);
         }
-        
+
+        /* ===== Verdict banner ===== */
+        .verdict-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            padding: 1.75rem;
+            border-radius: 14px;
+            margin-bottom: 1.5rem;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .verdict-banner.healthy {
+            background: linear-gradient(135deg, rgba(45, 212, 167, 0.15), rgba(0, 212, 255, 0.08));
+            border: 2px solid rgba(45, 212, 167, 0.45);
+        }
+
+        .verdict-banner.faulty {
+            background: linear-gradient(135deg, rgba(255, 71, 87, 0.18), rgba(196, 69, 105, 0.08));
+            border: 2px solid rgba(255, 71, 87, 0.5);
+        }
+
+        .verdict-banner.warning {
+            background: linear-gradient(135deg, rgba(255, 165, 2, 0.15), rgba(255, 209, 102, 0.06));
+            border: 2px solid rgba(255, 165, 2, 0.5);
+        }
+
+        .verdict-icon {
+            font-size: 3.2rem;
+            line-height: 1;
+        }
+
+        .verdict-text {
+            flex: 1;
+            text-align: left;
+        }
+
+        .verdict-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .verdict-banner.healthy .verdict-title { color: #2dd4a7; }
+        .verdict-banner.faulty .verdict-title { color: #ff6b7d; }
+        .verdict-banner.warning .verdict-title { color: #ffa502; }
+
+        .verdict-subtitle {
+            color: #8892b0;
+            margin-top: 0.35rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        /* Health score ring */
+        .health-score-ring {
+            position: relative;
+            width: 96px;
+            height: 96px;
+            flex-shrink: 0;
+        }
+
+        .score-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .score-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .score-label span {
+            font-size: 1.65rem;
+            font-weight: 800;
+            color: #eaeaea;
+        }
+
+        .score-label small {
+            color: #8892b0;
+            font-size: 0.72rem;
+            margin-top: -3px;
+        }
+
+        /* ===== Gauge ===== */
+        .gauge-container {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 14px;
+            padding: 1.25rem 1rem 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .gauge-title {
+            text-align: center;
+            color: #8892b0;
+            font-size: 0.92rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .gauge-svg {
+            width: 100%;
+            max-width: 480px;
+            display: block;
+            margin: 0 auto;
+        }
+
+        /* ===== Explanation box ===== */
+        .explain-box {
+            background: rgba(0, 212, 255, 0.05);
+            border-left: 4px solid #00d4ff;
+            border-radius: 8px;
+            padding: 1.1rem 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .explain-title {
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 0.4rem;
+            font-size: 0.95rem;
+        }
+
+        .explain-box p {
+            color: #c9d1e0;
+            font-size: 0.95rem;
+            line-height: 1.65;
+            margin: 0;
+        }
+
+        /* ===== Technical details ===== */
+        .tech-details {
+            background: rgba(0, 0, 0, 0.22);
+            border-radius: 10px;
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 1.1rem;
+        }
+
+        .tech-details summary {
+            cursor: pointer;
+            color: #8892b0;
+            font-size: 0.9rem;
+            user-select: none;
+        }
+
+        .tech-details summary:hover { color: #00d4ff; }
+
+        .tech-details[open] summary { margin-bottom: 1rem; }
+
+        /* ===== Batch items (simplified) ===== */
+        .batch-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.9rem 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            margin-bottom: 0.6rem;
+        }
+
+        .batch-item:last-child { margin-bottom: 0; }
+
+        .batch-verdict-emoji {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .batch-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .batch-name {
+            font-weight: 600;
+            color: #eaeaea;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .batch-mini-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.09);
+            border-radius: 3px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .batch-mini-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.8s ease;
+        }
+
+        .batch-verdict-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
         .audio-player {
             width: 100%;
             margin-top: 1rem;
@@ -446,26 +649,86 @@
                     <span class="result-title" id="resultFileName"></span>
                     <span class="status-badge" id="statusBadge">ANALYZING...</span>
                 </div>
-                
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-label">Reconstruction Error</div>
-                        <div class="metric-value" id="errorValue">--</div>
+
+                <!-- Big verdict banner -->
+                <div class="verdict-banner" id="verdictBanner">
+                    <div class="verdict-icon" id="verdictIcon">✅</div>
+                    <div class="verdict-text">
+                        <div class="verdict-title" id="verdictTitle">Checking...</div>
+                        <div class="verdict-subtitle" id="verdictSubtitle">Analyzing your fan audio</div>
                     </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Threshold</div>
-                        <div class="metric-value" id="thresholdValue">--</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-label">Confidence</div>
-                        <div class="metric-value" id="confidenceValue">--</div>
+                    <div class="health-score-ring">
+                        <svg viewBox="0 0 100 100" class="score-svg">
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="#233554" stroke-width="9"/>
+                            <circle cx="50" cy="50" r="42" fill="none" id="scoreArc" stroke="#00d4ff" stroke-width="9"
+                                    stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"
+                                    transform="rotate(-90 50 50)" style="transition: stroke-dashoffset 1s ease, stroke 0.5s ease;"/>
+                        </svg>
+                        <div class="score-label">
+                            <span id="healthScore">--</span>
+                            <small>/100</small>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+
+                <!-- Gauge visualization -->
+                <div class="gauge-container">
+                    <div class="gauge-title">Where does your fan's sound fall?</div>
+                    <svg viewBox="0 0 400 150" class="gauge-svg" preserveAspectRatio="xMidYMid meet">
+                        <defs>
+                            <linearGradient id="greenZone" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#2dd4a7"/>
+                                <stop offset="100%" stop-color="#a8e6cf"/>
+                            </linearGradient>
+                            <linearGradient id="yellowZone" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#ffa502"/>
+                                <stop offset="100%" stop-color="#ffd166"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Green zone (healthy) -->
+                        <path d="M 40 130 A 160 160 0 0 1 200 -10" fill="none" stroke="url(#greenZone)" stroke-width="26" stroke-linecap="round"/>
+                        <!-- Yellow zone (warning) -->
+                        <path d="M 200 -10 A 160 160 0 0 1 360 130" fill="none" stroke="url(#yellowZone)" stroke-width="26"/>
+                        <!-- Threshold marker -->
+                        <line x1="200" y1="20" x2="200" y2="55" stroke="#eaeaea" stroke-width="2.5"/>
+                        <text x="200" y="12" text-anchor="middle" fill="#8892b0" font-size="11">⚠️ warning line</text>
+                        <!-- Needle -->
+                        <line id="gaugeNeedle" x1="200" y1="130" x2="200" y2="30" stroke="#ffffff" stroke-width="4" stroke-linecap="round" style="transition: all 1s ease;"/>
+                        <circle cx="200" cy="130" r="7" fill="#ffffff"/>
+                        <!-- Zone labels -->
+                        <text x="75" y="145" text-anchor="middle" fill="#2dd4a7" font-size="12" font-weight="600">✓ Healthy</text>
+                        <text x="330" y="145" text-anchor="middle" fill="#ffa502" font-size="12" font-weight="600">⚠ Unusual</text>
+                    </svg>
                 </div>
-                
+
+                <!-- What this means section -->
+                <div class="explain-box" id="explainBox">
+                    <div class="explain-title">💡 What does this mean?</div>
+                    <p id="explanationText">Analyzing...</p>
+                </div>
+
+                <!-- Technical details (collapsed by default) -->
+                <details class="tech-details">
+                    <summary>🔧 Technical details</summary>
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Reconstruction Error</div>
+                            <div class="metric-value" id="errorValue">--</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Threshold</div>
+                            <div class="metric-value" id="thresholdValue">--</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Confidence</div>
+                            <div class="metric-value" id="confidenceValue">--</div>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                </details>
+
                 <audio class="audio-player" id="audioPlayer" controls></audio>
             </div>
             
@@ -476,6 +739,17 @@
                         <span id="batchCount">0 files</span>
                     </div>
                     <div id="batchList"></div>
+                </div>
+            </div>
+
+            <!-- Batch summary banner -->
+            <div class="result-card" id="batchSummary" style="display:none;">
+                <div class="verdict-banner">
+                    <div class="verdict-icon" id="batchVerdictIcon">📊</div>
+                    <div class="verdict-text">
+                        <div class="verdict-title" id="batchVerdictTitle"></div>
+                        <div class="verdict-subtitle" id="batchVerdictSubtitle"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -644,75 +918,193 @@
             }
         });
         
+        // ===== Friendly UI helpers =====
+        function computeHealthScore(error, threshold) {
+            // Map error/threshold ratio to intuitive 0-100 health score
+            // ratio 0 -> 100 (perfect), ratio 1 -> 50 (at warning line), ratio >= 2 -> 0 (faulty)
+            if (!threshold || threshold <= 0) return 50;
+            const ratio = error / threshold;
+            return Math.max(0, Math.min(100, 100 * (1 - ratio / 2)));
+        }
+
+        function setGaugeNeedle(error, threshold) {
+            const needle = document.getElementById('gaugeNeedle');
+            if (!needle || !threshold) return;
+            const ratio = error / threshold;
+            // -80 deg = far left (very healthy), 0 = up (warning line), +80 = far right (faulty)
+            const clampedRatio = Math.max(0, Math.min(2, ratio));
+            const angle = -80 + clampedRatio * 80;
+            needle.setAttribute('transform', `rotate(${angle} 200 130)`);
+        }
+
+        function setScoreRing(score, color) {
+            const arc = document.getElementById('scoreArc');
+            if (!arc) return;
+            const circumference = 264; // 2*pi*r for r=42
+            arc.style.strokeDashoffset = circumference * (1 - score / 100);
+            arc.setAttribute('stroke', color);
+        }
+
         function displaySingleResult(data) {
             try {
                 singleResult.style.display = 'block';
                 batchResults.classList.remove('visible');
-                
-                const isFaulty = Boolean(data.is_faulty);
-                statusBadge.textContent = data.status || (isFaulty ? 'FAULTY' : 'NORMAL');
-                statusBadge.className = 'status-badge ' + (isFaulty ? 'faulty' : 'normal');
-                
+                document.getElementById('batchSummary').style.display = 'none';
+
                 const error = Number(data.reconstruction_error) || 0;
                 const threshold = Number(data.threshold) || 0;
                 const confidence = Number(data.confidence) || 0;
-                
+                const isFaulty = Boolean(data.is_faulty);
+                const score = computeHealthScore(error, threshold);
+                const ratio = threshold > 0 ? error / threshold : 1;
+
+                // Status badge (kept small, top-right)
+                statusBadge.textContent = data.status || (isFaulty ? 'FAULTY' : 'NORMAL');
+                statusBadge.className = 'status-badge ' + (isFaulty ? 'faulty' : 'normal');
+
+                // Verdict banner
+                const banner = document.getElementById('verdictBanner');
+                const icon = document.getElementById('verdictIcon');
+                const title = document.getElementById('verdictTitle');
+                const subtitle = document.getElementById('verdictSubtitle');
+                const explanation = document.getElementById('explanationText');
+
+                let stateClass, emoji, heading, subText, explainText;
+
+                if (isFaulty && score < 25) {
+                    stateClass = 'faulty';
+                    emoji = '🔴';
+                    heading = 'Fault Detected';
+                    subText = 'This fan shows clear signs of abnormal sound patterns.';
+                    explainText = '<strong>What we found:</strong> The AI compared your recording against thousands of healthy fan sounds and found significant differences. This often points to issues like worn bearings, loose parts, or blade damage.<br><br><strong>What you should do:</strong> Schedule an inspection soon — catching problems early prevents bigger failures.';
+                } else if (isFaulty) {
+                    stateClass = 'faulty';
+                    emoji = '⚠️';
+                    heading = 'Unusual Sound Detected';
+                    subText = 'Some patterns in this recording look abnormal.';
+                    explainText = '<strong>What we found:</strong> There are irregularities in the sound that differ from a healthy fan. This could be early-stage wear or temporary interference.<br><br><strong>What you should do:</strong> Monitor this fan and re-check with another recording. If the alert repeats, plan a maintenance check.';
+                } else if (ratio > 0.85) {
+                    stateClass = 'warning';
+                    emoji = '🟡';
+                    heading = 'Mostly Normal';
+                    subText = 'Sounds close to normal, but slightly outside the typical range.';
+                    explainText = '<strong>What we found:</strong> Your fan sounds almost normal, but the pattern is near the edge of our healthy range. This is usually nothing urgent.<br><br><strong>What you should do:</strong> No action needed now — re-checking later is a good habit for early problem spotting.';
+                } else {
+                    stateClass = 'healthy';
+                    emoji = '✅';
+                    heading = 'Fan Sounds Healthy!';
+                    subText = 'The audio pattern matches normal fan operation. No issues detected.';
+                    explainText = '<strong>What we found:</strong> Great news — your fan\'s sound signature closely matches what a perfectly healthy fan should sound like.<br><br><strong>What you should do:</strong> Nothing! Keep using your fan as usual.';
+                }
+
+                banner.className = 'verdict-banner ' + stateClass;
+                icon.textContent = emoji;
+                title.textContent = heading;
+                subtitle.textContent = subText;
+                explanation.innerHTML = explainText;
+
+                // Health score ring
+                const ringColor = stateClass === 'healthy' ? '#2dd4a7' : stateClass === 'warning' ? '#ffa502' : '#ff6b7d';
+                setScoreRing(score, ringColor);
+                document.getElementById('healthScore').textContent = Math.round(score);
+
+                // Gauge needle
+                setGaugeNeedle(error, threshold);
+
+                // Technical details (collapsed section)
                 errorValue.textContent = error.toFixed(6);
                 errorValue.className = 'metric-value ' + (isFaulty ? 'warning' : 'success');
-                
                 thresholdValue.textContent = threshold.toFixed(6);
                 confidenceValue.textContent = (confidence * 100).toFixed(1) + '%';
                 confidenceValue.className = 'metric-value ' + (isFaulty ? 'warning' : 'success');
-                
+
                 const progressPercent = Math.min((error / (threshold * 2)) * 100, 100);
                 progressFill.style.width = progressPercent + '%';
-                progressFill.className = 'progress-fill ' + 
+                progressFill.className = 'progress-fill ' +
                     (progressPercent > 80 ? 'danger' : progressPercent > 50 ? 'warning' : '');
             } catch (err) {
                 console.error('displaySingleResult error:', err);
                 showError('Display error: ' + (err.message || String(err)));
             }
         }
-        
+
+        function fileVerdictFor(r) {
+            if (r.error) return { emoji: '❓', label: 'Error', cls: 'faulty', pct: 0, color: '#8892b0' };
+            const score = computeHealthScore(Number(r.reconstruction_error) || 0, Number(r.threshold) || 1);
+            if (r.is_faulty) {
+                return { emoji: '⚠️', label: 'Unusual', pct: score, color: '#ff6b7d' };
+            } else if (score > 42) {
+                return { emoji: '✅', label: 'Healthy', pct: score, color: '#2dd4a7' };
+            } else {
+                return { emoji: '🟡', label: 'Borderline OK', pct: score, color: '#ffa502' };
+            }
+        }
+
         function displayBatchResults(results) {
             singleResult.style.display = 'none';
             batchResults.classList.add('visible');
-            
+            document.getElementById('batchSummary').style.display = 'block';
+
             batchCount.textContent = `${results.length} files`;
             batchList.innerHTML = '';
-            
+
+            let healthy = 0, unusual = 0, errors = 0;
+
             results.forEach(r => {
-                if (r.error) {
-                    batchList.innerHTML += `
-                        <div class="batch-item">
-                            <div class="batch-info">
-                                <div class="batch-status faulty"></div>
-                                <span class="batch-name">${r.filename}</span>
-                            </div>
-                            <span class="batch-error">Error: ${r.error}</span>
+                const v = fileVerdictFor(r);
+                if (r.error) errors++;
+                else if (v.label === 'Healthy') healthy++;
+                else unusual++;
+
+                const name = (r.filename || 'file').replace(/</g, '&lt;');
+                batchList.innerHTML += `
+                    <div class="batch-item">
+                        <div class="batch-verdict-emoji">${v.emoji}</div>
+                        <div class="batch-main">
+                            <div class="batch-name">${name}</div>
+                            <div class="batch-mini-bar"><div class="batch-mini-bar-fill" style="width:${Math.round(v.pct)}%; background:${v.color};"></div></div>
                         </div>
-                    `;
-                } else {
-                    batchList.innerHTML += `
-                        <div class="batch-item">
-                            <div class="batch-info">
-                                <div class="batch-status ${r.is_faulty ? 'faulty' : 'normal'}"></div>
-                                <span class="batch-name">${r.filename}</span>
-                            </div>
-                            <span class="batch-error">
-                                ${r.status} | Recon. Error: ${r.reconstruction_error.toFixed(4)} | Confidence: ${(r.confidence * 100).toFixed(1)}%
-                            </span>
-                        </div>
-                    `;
-                }
+                        <span class="batch-verdict-label" style="color:${v.color};">${v.label}</span>
+                    </div>
+                `;
             });
+
+            // Summary banner
+            const bIcon = document.getElementById('batchVerdictIcon');
+            const bTitle = document.getElementById('batchVerdictTitle');
+            const bSub = document.getElementById('batchVerdictSubtitle');
+            const banner = document.getElementById('batchSummary').querySelector('.verdict-banner');
+
+            if (errors === results.length) {
+                banner.className = 'verdict-banner warning';
+                bIcon.textContent = '❓'; 
+                bTitle.textContent = 'Could not analyze files';
+                bSub.textContent = 'Something went wrong processing all uploads.';
+            } else if (unusual === 0 && errors === 0) {
+                banner.className = 'verdict-banner healthy';
+                bIcon.textContent = '🎉';
+                bTitle.textContent = `All ${healthy} fans sound healthy!`;
+                bSub.textContent = 'Every uploaded recording matched normal fan operation.';
+            } else if (healthy === 0 && errors === 0) {
+                banner.className = 'verdict-banner faulty';
+                bIcon.textContent = '⚠️';
+                bTitle.textContent = `${unusual} of ${unusual} fans need attention`;
+                bSub.textContent = 'All recordings showed unusual sound patterns.';
+            } else {
+                banner.className = 'verdict-banner warning';
+                bIcon.textContent = '📊';
+                bTitle.textContent = `${unusual} fan${unusual !== 1 ? 's' : ''} flagged out of ${results.length}`;
+                bSub.textContent = `${healthy} healthy · ${unusual} with unusual sounds${errors ? ` · ${errors} failed` : ''}. Check flagged items below.`;
+            }
         }
         
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 const response = await fetch(`${API_URL}/health`);
                 const data = await response.json();
-                if (!data.model_loaded) {
+                // Support both old (model_loaded) and new (per_id_models_loaded) API formats
+                const loaded = data.model_loaded || (data.per_id_models_loaded > 0) || data.global_model_loaded;
+                if (!loaded) {
                     showError('Model not loaded. Please check server.');
                     analyzeBtn.disabled = true;
                 }
