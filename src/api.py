@@ -35,7 +35,7 @@ app.add_middleware(
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
-# STgram-MFN detector
+# STgram-MFN detector (lazy loaded)
 stgram_detector = None
 config = None
 DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() == "true"
@@ -76,27 +76,40 @@ def load_stgram_detector(model_path: str, device: torch.device):
     return detector
 
 
+def get_stgram_detector():
+    """Lazy load STgram-MFN detector on first request."""
+    global stgram_detector, config
+    
+    if stgram_detector is not None:
+        return stgram_detector
+    
+    if config is None:
+        load_config()
+    
+    device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
+    model_path = Path("checkpoints/stgram_mfn_best.pth")
+    
+    if not model_path.exists():
+        raise HTTPException(status_code=503, detail="Model checkpoint not found")
+    
+    try:
+        global stgram_detector
+        stgram_detector = load_stgram_detector(str(model_path), device)
+        print(f"Loaded STgram-MFN model (threshold: {stgram_detector.threshold:.4f})")
+        return stgram_detector
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Failed to load model: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
-    global config
+    """Fast startup - just verify config loads, lazy load model on first request."""
     if DEMO_MODE:
         print("Running in DEMO MODE - no models loaded")
         return
     
     load_config()
-    
-    device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
-    model_path = Path("checkpoints/stgram_mfn_best.pth")
-    
-    if model_path.exists():
-        try:
-            global stgram_detector
-            stgram_detector = load_stgram_detector(str(model_path), device)
-            print(f"Loaded STgram-MFN model (threshold: {stgram_detector.threshold:.4f})")
-        except Exception as e:
-            print(f"Failed to load STgram-MFN model: {e}")
-    else:
-        print(f"Warning: Model checkpoint not found at {model_path}")
+    print("Fast startup complete - model will load on first request")
 
 
 def preprocess_audio(waveform: torch.Tensor, sr: int, config: dict) -> torch.Tensor:
@@ -186,6 +199,9 @@ def run_inference(filename: str, contents: bytes, config: dict, demo: bool = Fal
     if config is None:
         load_config()
     
+    # Get detector (lazy load)
+    detector = get_stgram_detector()
+    
     # Load audio with pydub (supports MP3, WAV, FLAC, OGG, etc.)
     try:
         audio = AudioSegment.from_file(io.BytesIO(contents))
@@ -219,13 +235,13 @@ def run_inference(filename: str, contents: bytes, config: dict, demo: bool = Fal
     
     waveform = torch.from_numpy(waveform_np).unsqueeze(0)
     
-    mel_spec = preprocess_audio(waveform, config['data']['audio']['sample_rate'], config).to(stgram_detector.device)
+    mel_spec = preprocess_audio(waveform, config['data']['audio']['sample_rate'], config).to(detector.device)
     
     with torch.no_grad():
         # Use STgram-MFN's anomaly scoring
-        anomaly_scores, is_faulty = compute_anomaly_score(stgram_detector, waveform, stgram_detector.device)
+        anomaly_scores, is_faulty = compute_anomaly_score(detector, waveform, detector.device)
         error = float(anomaly_scores[0]) if len(anomaly_scores) > 0 else 0.0
-        threshold = stgram_detector.threshold
+        threshold = detector.threshold
         is_faulty = bool(is_faulty[0]) if hasattr(is_faulty, '__len__') else bool(is_faulty)
         confidence = min(error / (threshold * 2), 1.0) if threshold > 0 else 0.5
     
@@ -242,8 +258,8 @@ def run_inference(filename: str, contents: bytes, config: dict, demo: bool = Fal
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...), demo: bool = Query(False)):
-    if stgram_detector is None and not (DEMO_MODE or demo):
-        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not (DEMO_MODE or demo):
+        get_stgram_detector()  # Will raise 503 if model not available
     
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
@@ -256,8 +272,8 @@ async def predict(file: UploadFile = File(...), demo: bool = Query(False)):
 
 @app.post("/predict_batch")
 async def predict_batch(files: list[UploadFile] = File(...), demo: bool = Query(False)):
-    if stgram_detector is None and not (DEMO_MODE or demo):
-        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not (DEMO_MODE or demo):
+        get_stgram_detector()  # Will raise 503 if model not available
     
     results = []
     for file in files:
@@ -276,21 +292,23 @@ async def predict_batch(files: list[UploadFile] = File(...), demo: bool = Query(
 
 @app.get("/threshold")
 async def get_threshold():
-    if stgram_detector is None and not DEMO_MODE:
-        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not DEMO_MODE:
+        get_stgram_detector()  # Will raise 503 if model not available
     
     if DEMO_MODE:
         return {"threshold": 0.005, "demo": True}
     
-    return {"threshold": stgram_detector.threshold}
+    detector = get_stgram_detector()
+    return {"threshold": detector.threshold}
 
 
 @app.get("/health")
 async def health_check():
+    model_loaded = stgram_detector is not None
     return {
         "status": "healthy",
-        "model_loaded": stgram_detector is not None,
-        "model_type": "STgram-MFN" if stgram_detector else None
+        "model_loaded": model_loaded,
+        "model_type": "STgram-MFN" if model_loaded else None
     }
 
 
