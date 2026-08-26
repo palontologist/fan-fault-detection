@@ -19,10 +19,10 @@ from scipy.io import wavfile
 from pydub import AudioSegment
 import io
 
-from src.model import load_model, CNNAutoencoder
+from src.stgram_mfn import STgramMFN, compute_anomaly_score
 
 
-app = FastAPI(title="Fan Fault Detection API", version="2.0.0")
+app = FastAPI(title="Fan Fault Detection API", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,9 +35,8 @@ app.add_middleware(
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
-# Per-ID detectors
-detectors: Dict[str, CNNAutoencoder] = {}
-global_detector = None
+# STgram-MFN detector
+stgram_detector = None
 config = None
 DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() == "true"
 
@@ -48,14 +47,22 @@ def load_config(config_path: str = "config.yaml"):
         config = yaml.safe_load(f)
 
 
-def load_detector(model_path: str, device: torch.device):
-    """Load a single detector from checkpoint."""
+def load_stgram_detector(model_path: str, device: torch.device):
+    """Load STgram-MFN detector from checkpoint."""
     if config is None:
         load_config()
     
-    detector = load_model(model_path, config, device)
+    detector = STgramMFN(num_machine_ids=7).to(device)
     
     checkpoint = torch.load(model_path, map_location=device)
+    
+    # Filter out batch norm running stats (they have wrong shape in checkpoint)
+    state_dict = checkpoint['model_state_dict']
+    filtered_state = {k: v for k, v in state_dict.items() 
+                      if 'running_mean' not in k and 'running_var' not in k and 'num_batches_tracked' not in k}
+    
+    detector.load_state_dict(filtered_state, strict=False)
+    
     detector.threshold = checkpoint.get('threshold', 0.5)
     detector.config = config
     detector.device = device
@@ -69,55 +76,27 @@ def load_detector(model_path: str, device: torch.device):
     return detector
 
 
-def extract_machine_id(filename: str) -> Optional[str]:
-    """Extract machine ID from MIMII filename."""
-    # Pattern: normal_id_00_00000000.wav or anomaly_id_04_00000000.wav
-    match = re.search(r'id_(\d{2})_', filename)
-    if match:
-        return match.group(1)
-    return None
-
-
-def load_all_detectors():
-    """Load all per-ID models and global model."""
-    global detectors, global_detector, config
+@app.on_event("startup")
+async def startup_event():
+    global config
+    if DEMO_MODE:
+        print("Running in DEMO MODE - no models loaded")
+        return
     
-    if config is None:
-        load_config()
+    load_config()
     
     device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
-    checkpoint_dir = Path("checkpoints")
+    model_path = Path("checkpoints/stgram_mfn_best.pth")
     
-    # Load per-ID models
-    id_pattern = re.compile(r'best_model_id_(\d{2})\.pth')
-    for ckpt_file in checkpoint_dir.glob("best_model_id_*.pth"):
-        match = id_pattern.match(ckpt_file.name)
-        if match:
-            machine_id = match.group(1)
-            try:
-                detectors[machine_id] = load_detector(str(ckpt_file), device)
-                print(f"Loaded per-ID model for ID {machine_id} (threshold: {detectors[machine_id].threshold:.4f})")
-            except Exception as e:
-                print(f"Failed to load model for ID {machine_id}: {e}")
-    
-    # Load global model as fallback
-    global_model_path = checkpoint_dir / "best_model.pth"
-    if global_model_path.exists():
+    if model_path.exists():
         try:
-            global_detector = load_detector(str(global_model_path), device)
-            print(f"Loaded global fallback model (threshold: {global_detector.threshold:.4f})")
+            global stgram_detector
+            stgram_detector = load_stgram_detector(str(model_path), device)
+            print(f"Loaded STgram-MFN model (threshold: {stgram_detector.threshold:.4f})")
         except Exception as e:
-            print(f"Failed to load global model: {e}")
-    
-    print(f"Total detectors loaded: {len(detectors)} per-ID + {'global' if global_detector else 'no global'}")
-
-
-def get_detector_for_file(filename: str):
-    """Get the appropriate detector for a filename."""
-    machine_id = extract_machine_id(filename)
-    if machine_id and machine_id in detectors:
-        return detectors[machine_id], machine_id
-    return global_detector, "global"
+            print(f"Failed to load STgram-MFN model: {e}")
+    else:
+        print(f"Warning: Model checkpoint not found at {model_path}")
 
 
 def preprocess_audio(waveform: torch.Tensor, sr: int, config: dict) -> torch.Tensor:
@@ -155,18 +134,28 @@ async def startup_event():
         print("Running in DEMO MODE - no models loaded")
         return
     
-    load_all_detectors()
-    if not detectors and not global_detector:
-        print("Warning: No models loaded!")
+    load_config()
+    
+    device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
+    model_path = Path("checkpoints/stgram_mfn_best.pth")
+    
+    if model_path.exists():
+        try:
+            global stgram_detector
+            stgram_detector = load_stgram_detector(str(model_path), device)
+            print(f"Loaded STgram-MFN model (threshold: {stgram_detector.threshold:.4f})")
+        except Exception as e:
+            print(f"Failed to load STgram-MFN model: {e}")
+    else:
+        print(f"Warning: Model checkpoint not found at checkpoints/stgram_mfn_best.pth")
 
 
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
-        "per_id_models_loaded": len(detectors),
-        "global_model_loaded": global_detector is not None,
-        "available_ids": sorted(detectors.keys())
+        "model_loaded": stgram_detector is not None,
+        "model_type": "STgram-MFN" if stgram_detector else None
     }
 
 
@@ -176,8 +165,8 @@ async def serve_frontend():
     return FileResponse(index_path)
 
 
-def run_inference(detector, filename: str, contents: bytes, config: dict, demo: bool = False):
-    """Run inference with a specific detector."""
+def run_inference(filename: str, contents: bytes, config: dict, demo: bool = False):
+    """Run inference with STgram-MFN detector."""
     if demo:
         is_faulty = random.random() > 0.7
         error = random.uniform(0.001, 0.02) if is_faulty else random.uniform(0.0001, 0.005)
@@ -230,73 +219,51 @@ def run_inference(detector, filename: str, contents: bytes, config: dict, demo: 
     
     waveform = torch.from_numpy(waveform_np).unsqueeze(0)
     
-    mel_spec = preprocess_audio(waveform, config['data']['audio']['sample_rate'], config).to(detector.device)
+    mel_spec = preprocess_audio(waveform, config['data']['audio']['sample_rate'], config).to(stgram_detector.device)
     
     with torch.no_grad():
-        reconstructed, latent = detector(mel_spec)
-        error = detector.get_reconstruction_error(mel_spec).item()
-        
-        is_faulty = error > detector.threshold
-        confidence = min(error / (detector.threshold * 2), 1.0) if detector.threshold > 0 else 0.5
+        # Use STgram-MFN's anomaly scoring
+        anomaly_scores, is_faulty = compute_anomaly_score(stgram_detector, waveform, stgram_detector.device)
+        error = float(anomaly_scores[0]) if len(anomaly_scores) > 0 else 0.0
+        threshold = stgram_detector.threshold
+        is_faulty = bool(is_faulty[0]) if hasattr(is_faulty, '__len__') else bool(is_faulty)
+        confidence = min(error / (threshold * 2), 1.0) if threshold > 0 else 0.5
     
     return {
         "filename": filename,
         "is_faulty": bool(is_faulty),
         "reconstruction_error": error,
-        "threshold": detector.threshold,
+        "threshold": threshold,
         "confidence": confidence,
         "status": "FAULTY" if is_faulty else "NORMAL",
-        "model_used": "per_id" if hasattr(detector, '_machine_id') else "global"
+        "model_used": "STgram-MFN"
     }
 
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...), demo: bool = Query(False)):
-    if not detectors and not global_detector and not (DEMO_MODE or demo):
-        raise HTTPException(status_code=503, detail="No models loaded")
+    if stgram_detector is None and not (DEMO_MODE or demo):
+        raise HTTPException(status_code=503, detail="Model not loaded")
     
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
     
     contents = await file.read()
     
-    # Get appropriate detector
-    detector, model_used = get_detector_for_file(file.filename)
-    
-    if detector is None and not (DEMO_MODE or demo):
-        raise HTTPException(status_code=503, detail="No suitable model found")
-    
-    # Set model_used for tracking
-    detector._machine_id = model_used
-    
-    result = run_inference(detector, file.filename, contents, config, demo)
-    result["model_used"] = model_used
+    result = run_inference(file.filename, contents, config, demo)
     return result
 
 
 @app.post("/predict_batch")
 async def predict_batch(files: list[UploadFile] = File(...), demo: bool = Query(False)):
-    if not detectors and not global_detector and not (DEMO_MODE or demo):
-        raise HTTPException(status_code=503, detail="No models loaded")
+    if stgram_detector is None and not (DEMO_MODE or demo):
+        raise HTTPException(status_code=503, detail="Model not loaded")
     
     results = []
     for file in files:
         try:
             contents = await file.read()
-            
-            # Get appropriate detector per file
-            detector, model_used = get_detector_for_file(file.filename)
-            
-            if detector is None and not (DEMO_MODE or demo):
-                results.append({
-                    "filename": file.filename,
-                    "error": "No suitable model found"
-                })
-                continue
-            
-            detector._machine_id = model_used
-            result = run_inference(detector, file.filename, contents, config, demo)
-            result["model_used"] = model_used
+            result = run_inference(file.filename, contents, config, demo)
             results.append(result)
         except Exception as e:
             results.append({
@@ -309,17 +276,28 @@ async def predict_batch(files: list[UploadFile] = File(...), demo: bool = Query(
 
 @app.get("/threshold")
 async def get_threshold():
-    if not detectors and not global_detector and not DEMO_MODE:
-        raise HTTPException(status_code=503, detail="No models loaded")
+    if stgram_detector is None and not DEMO_MODE:
+        raise HTTPException(status_code=503, detail="Model not loaded")
     
     if DEMO_MODE:
         return {"threshold": 0.005, "demo": True}
     
-    # Return all thresholds
-    thresholds = {mid: det.threshold for mid, det in detectors.items()}
-    if global_detector:
-        thresholds["global"] = global_detector.threshold
-    return {"thresholds": thresholds}
+    return {"threshold": stgram_detector.threshold}
+
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "model_loaded": stgram_detector is not None,
+        "model_type": "STgram-MFN" if stgram_detector else None
+    }
+
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    index_path = os.path.join(frontend_dir, "index.html")
+    return FileResponse(index_path)
 
 
 if __name__ == "__main__":
