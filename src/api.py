@@ -35,6 +35,8 @@ app.add_middleware(
 frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
 app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
+checkpoint_dir = Path(os.path.join(os.path.dirname(__file__), "..", "checkpoints"))
+
 # Per-ID detectors (7 models for IDs 00-06)
 detectors: Dict[str, CNNAutoencoder] = {}
 global_detector = None
@@ -85,7 +87,7 @@ def load_all_detectors():
         load_config()
     
     device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
-    checkpoint_dir = Path("checkpoints")
+    # Uses module-level checkpoint_dir (absolute path)
     
     # Load per-ID models
     id_pattern = re.compile(r'best_model_id_(\d{2})\.pth')
