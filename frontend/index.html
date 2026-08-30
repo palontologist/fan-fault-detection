@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fan Fault Detection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #eaeaea;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #00d4ff 0%, #7c4dff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+        
+        .subtitle {
+            color: #8892b0;
+            font-size: 1.1rem;
+        }
+        
+        .upload-section {
+            background: rgba(22, 33, 62, 0.8);
+            border: 1px solid #233554;
+            border-radius: 16px;
+            padding: 2.5rem;
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-section:hover {
+            border-color: #00d4ff;
+            box-shadow: 0 0 30px rgba(0, 212, 255, 0.1);
+        }
+        
+        .upload-area {
+            border: 2px dashed #233554;
+            border-radius: 12px;
+            padding: 3rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .upload-area:hover,
+        .upload-area.drag-over {
+            border-color: #00d4ff;
+            background: rgba(0, 212, 255, 0.05);
+        }
+        
+        .upload-area.drag-over {
+            transform: scale(1.01);
+        }
+        
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 1rem;
+            color: #00d4ff;
+        }
+        
+        .upload-text {
+            font-size: 1.1rem;
+            color: #8892b0;
+        }
+        
+        .upload-text strong {
+            color: #eaeaea;
+        }
+        
+        .file-input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .file-info {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            display: none;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .file-info.visible {
+            display: flex;
+        }
+        
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            color: #7c4dff;
+        }
+        
+        .file-details {
+            flex: 1;
+        }
+        
+        .file-name {
+            font-weight: 600;
+            color: #eaeaea;
+        }
+        
+        .file-size {
+            font-size: 0.85rem;
+            color: #8892b0;
+        }
+        
+        .analyze-btn {
+            width: 100%;
+            padding: 1rem;
+            margin-top: 1.5rem;
+            background: linear-gradient(135deg, #00d4ff 0%, #7c4dff 100%);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .analyze-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+        
+        .analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .analyze-btn .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+        
+        .analyze-btn.loading .spinner {
+            display: block;
+        }
+        
+        .analyze-btn.loading .btn-text {
+            display: none;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .results-section {
+            display: none;
+        }
+        
+        .results-section.visible {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .result-card {
+            background: rgba(22, 33, 62, 0.8);
+            border: 1px solid #233554;
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #233554;
+        }
+        
+        .result-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #eaeaea;
+        }
+        
+        .status-badge {
+            padding: 0.5rem 1.5rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-badge.normal {
+            background: rgba(0, 212, 255, 0.2);
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.4);
+        }
+        
+        .status-badge.faulty {
+            background: rgba(255, 71, 87, 0.2);
+            color: #ff4757;
+            border: 1px solid rgba(255, 71, 87, 0.4);
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .metric-card {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-size: 0.85rem;
+            color: #8892b0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #eaeaea;
+        }
+        
+        .metric-value.warning {
+            color: #ff4757;
+        }
+        
+        .metric-value.success {
+            color: #00d4ff;
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+            background: linear-gradient(90deg, #00d4ff 0%, #7c4dff 100%);
+        }
+        
+        .progress-fill.warning {
+            background: linear-gradient(90deg, #ffa502 0%, #ff4757 100%);
+        }
+        
+        .progress-fill.danger {
+            background: linear-gradient(90deg, #ff4757 0%, #c44569 100%);
+        }
+
+        /* ===== Verdict banner ===== */
+        .verdict-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            padding: 1.75rem;
+            border-radius: 14px;
+            margin-bottom: 1.5rem;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .verdict-banner.healthy {
+            background: linear-gradient(135deg, rgba(45, 212, 167, 0.15), rgba(0, 212, 255, 0.08));
+            border: 2px solid rgba(45, 212, 167, 0.45);
+        }
+
+        .verdict-banner.faulty {
+            background: linear-gradient(135deg, rgba(255, 71, 87, 0.18), rgba(196, 69, 105, 0.08));
+            border: 2px solid rgba(255, 71, 87, 0.5);
+        }
+
+        .verdict-banner.warning {
+            background: linear-gradient(135deg, rgba(255, 165, 2, 0.15), rgba(255, 209, 102, 0.06));
+            border: 2px solid rgba(255, 165, 2, 0.5);
+        }
+
+        .verdict-icon {
+            font-size: 3.2rem;
+            line-height: 1;
+        }
+
+        .verdict-text {
+            flex: 1;
+            text-align: left;
+        }
+
+        .verdict-title {
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+
+        .verdict-banner.healthy .verdict-title { color: #2dd4a7; }
+        .verdict-banner.faulty .verdict-title { color: #ff6b7d; }
+        .verdict-banner.warning .verdict-title { color: #ffa502; }
+
+        .verdict-subtitle {
+            color: #8892b0;
+            margin-top: 0.35rem;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        /* Health score ring */
+        .health-score-ring {
+            position: relative;
+            width: 96px;
+            height: 96px;
+            flex-shrink: 0;
+        }
+
+        .score-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .score-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .score-label span {
+            font-size: 1.65rem;
+            font-weight: 800;
+            color: #eaeaea;
+        }
+
+        .score-label small {
+            color: #8892b0;
+            font-size: 0.72rem;
+            margin-top: -3px;
+        }
+
+        /* ===== Gauge ===== */
+        .gauge-container {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 14px;
+            padding: 1.25rem 1rem 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .gauge-title {
+            text-align: center;
+            color: #8892b0;
+            font-size: 0.92rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .gauge-svg {
+            width: 100%;
+            max-width: 480px;
+            display: block;
+            margin: 0 auto;
+        }
+
+        /* ===== Explanation box ===== */
+        .explain-box {
+            background: rgba(0, 212, 255, 0.05);
+            border-left: 4px solid #00d4ff;
+            border-radius: 8px;
+            padding: 1.1rem 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .explain-title {
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 0.4rem;
+            font-size: 0.95rem;
+        }
+
+        .explain-box p {
+            color: #c9d1e0;
+            font-size: 0.95rem;
+            line-height: 1.65;
+            margin: 0;
+        }
+
+        /* ===== Technical details ===== */
+        .tech-details {
+            background: rgba(0, 0, 0, 0.22);
+            border-radius: 10px;
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 1.1rem;
+        }
+
+        .tech-details summary {
+            cursor: pointer;
+            color: #8892b0;
+            font-size: 0.9rem;
+            user-select: none;
+        }
+
+        .tech-details summary:hover { color: #00d4ff; }
+
+        .tech-details[open] summary { margin-bottom: 1rem; }
+
+        /* ===== Batch items (simplified) ===== */
+        .batch-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.9rem 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            margin-bottom: 0.6rem;
+        }
+
+        .batch-item:last-child { margin-bottom: 0; }
+
+        .batch-verdict-emoji {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+        }
+
+        .batch-main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .batch-name {
+            font-weight: 600;
+            color: #eaeaea;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .batch-mini-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.09);
+            border-radius: 3px;
+            margin-top: 6px;
+            overflow: hidden;
+        }
+
+        .batch-mini-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.8s ease;
+        }
+
+        .batch-verdict-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .audio-player {
+            width: 100%;
+            margin-top: 1rem;
+        }
+        
+        .error-message {
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid rgba(255, 71, 87, 0.3);
+            border-radius: 10px;
+            padding: 1rem;
+            color: #ff4757;
+            display: none;
+        }
+        
+        .error-message.visible {
+            display: block;
+        }
+        
+        .batch-results {
+            display: none;
+        }
+        
+        .batch-results.visible {
+            display: block;
+        }
+        
+        .batch-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .batch-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        .batch-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .batch-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .batch-status.normal {
+            background: #00d4ff;
+            box-shadow: 0 0 10px #00d4ff;
+        }
+        
+        .batch-status.faulty {
+            background: #ff4757;
+            box-shadow: 0 0 10px #ff4757;
+        }
+        
+        .batch-name {
+            font-weight: 500;
+            color: #eaeaea;
+        }
+        
+        .batch-error {
+            font-size: 0.9rem;
+            color: #8892b0;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: #4a5568;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .upload-area {
+                padding: 2rem 1rem;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Fan Fault Detection</h1>
+            <p class="subtitle">AI-powered anomaly detection for industrial fan monitoring</p>
+        </header>
+        
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 10l-5 5-5-5M12 15V3"/>
+                </svg>
+                <p class="upload-text">Drag & drop audio file here, or <strong>click to browse</strong></p>
+                <p class="upload-text" style="font-size: 0.85rem; margin-top: 0.5rem;">Supports: WAV, MP3, FLAC, OGG (max 10MB)</p>
+                <input type="file" class="file-input" id="fileInput" accept=".wav,.mp3,.flac,.ogg" multiple>
+            </div>
+            
+            <div class="file-info" id="fileInfo">
+                <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <div class="file-details">
+                    <div class="file-name" id="fileName"></div>
+                    <div class="file-size" id="fileSize"></div>
+                </div>
+            </div>
+            
+            <button class="analyze-btn" id="analyzeBtn" disabled>
+                <span class="btn-text">Analyze Fan Sound</span>
+                <div class="spinner"></div>
+            </button>
+            
+            <div class="error-message" id="errorMessage"></div>
+        </div>
+        
+        <div class="results-section" id="resultsSection">
+            <div class="result-card" id="singleResult">
+                <div class="result-header">
+                    <span class="result-title" id="resultFileName"></span>
+                    <span class="status-badge" id="statusBadge">ANALYZING...</span>
+                </div>
+
+                <!-- Big verdict banner -->
+                <div class="verdict-banner" id="verdictBanner">
+                    <div class="verdict-icon" id="verdictIcon">✅</div>
+                    <div class="verdict-text">
+                        <div class="verdict-title" id="verdictTitle">Checking...</div>
+                        <div class="verdict-subtitle" id="verdictSubtitle">Analyzing your fan audio</div>
+                    </div>
+                    <div class="health-score-ring">
+                        <svg viewBox="0 0 100 100" class="score-svg">
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="#233554" stroke-width="9"/>
+                            <circle cx="50" cy="50" r="42" fill="none" id="scoreArc" stroke="#00d4ff" stroke-width="9"
+                                    stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"
+                                    transform="rotate(-90 50 50)" style="transition: stroke-dashoffset 1s ease, stroke 0.5s ease;"/>
+                        </svg>
+                        <div class="score-label">
+                            <span id="healthScore">--</span>
+                            <small>/100</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gauge visualization -->
+                <div class="gauge-container">
+                    <div class="gauge-title">Where does your fan's sound fall?</div>
+                    <svg viewBox="0 0 400 150" class="gauge-svg" preserveAspectRatio="xMidYMid meet">
+                        <defs>
+                            <linearGradient id="greenZone" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#2dd4a7"/>
+                                <stop offset="100%" stop-color="#a8e6cf"/>
+                            </linearGradient>
+                            <linearGradient id="yellowZone" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#ffa502"/>
+                                <stop offset="100%" stop-color="#ffd166"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Green zone (healthy) -->
+                        <path d="M 40 130 A 160 160 0 0 1 200 -10" fill="none" stroke="url(#greenZone)" stroke-width="26" stroke-linecap="round"/>
+                        <!-- Yellow zone (warning) -->
+                        <path d="M 200 -10 A 160 160 0 0 1 360 130" fill="none" stroke="url(#yellowZone)" stroke-width="26"/>
+                        <!-- Threshold marker -->
+                        <line x1="200" y1="20" x2="200" y2="55" stroke="#eaeaea" stroke-width="2.5"/>
+                        <text x="200" y="12" text-anchor="middle" fill="#8892b0" font-size="11">⚠️ warning line</text>
+                        <!-- Needle -->
+                        <line id="gaugeNeedle" x1="200" y1="130" x2="200" y2="30" stroke="#ffffff" stroke-width="4" stroke-linecap="round" style="transition: all 1s ease;"/>
+                        <circle cx="200" cy="130" r="7" fill="#ffffff"/>
+                        <!-- Zone labels -->
+                        <text x="75" y="145" text-anchor="middle" fill="#2dd4a7" font-size="12" font-weight="600">✓ Healthy</text>
+                        <text x="330" y="145" text-anchor="middle" fill="#ffa502" font-size="12" font-weight="600">⚠ Unusual</text>
+                    </svg>
+                </div>
+
+                <!-- What this means section -->
+                <div class="explain-box" id="explainBox">
+                    <div class="explain-title">💡 What does this mean?</div>
+                    <p id="explanationText">Analyzing...</p>
+                </div>
+
+                <!-- Technical details (collapsed by default) -->
+                <details class="tech-details">
+                    <summary>🔧 Technical details</summary>
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Reconstruction Error</div>
+                            <div class="metric-value" id="errorValue">--</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Threshold</div>
+                            <div class="metric-value" id="thresholdValue">--</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Confidence</div>
+                            <div class="metric-value" id="confidenceValue">--</div>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                    </div>
+                </details>
+
+                <audio class="audio-player" id="audioPlayer" controls></audio>
+            </div>
+            
+            <div class="batch-results" id="batchResults">
+                <div class="result-card">
+                    <div class="result-header">
+                        <span class="result-title">Batch Results</span>
+                        <span id="batchCount">0 files</span>
+                    </div>
+                    <div id="batchList"></div>
+                </div>
+            </div>
+
+            <!-- Batch summary banner -->
+            <div class="result-card" id="batchSummary" style="display:none;">
+                <div class="verdict-banner">
+                    <div class="verdict-icon" id="batchVerdictIcon">📊</div>
+                    <div class="verdict-text">
+                        <div class="verdict-title" id="batchVerdictTitle"></div>
+                        <div class="verdict-subtitle" id="batchVerdictSubtitle"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer>
+        Built with PyTorch + FastAPI | Fan Fault Detection System
+    </footer>
+    
+    <script>
+        const API_URL = window.location.origin;
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const errorMessage = document.getElementById('errorMessage');
+        const resultsSection = document.getElementById('resultsSection');
+        const singleResult = document.getElementById('singleResult');
+        const batchResults = document.getElementById('batchResults');
+        const batchList = document.getElementById('batchList');
+        const batchCount = document.getElementById('batchCount');
+        
+        const resultFileName = document.getElementById('resultFileName');
+        const statusBadge = document.getElementById('statusBadge');
+        const errorValue = document.getElementById('errorValue');
+        const thresholdValue = document.getElementById('thresholdValue');
+        const confidenceValue = document.getElementById('confidenceValue');
+        const progressFill = document.getElementById('progressFill');
+        const audioPlayer = document.getElementById('audioPlayer');
+        
+        let selectedFiles = [];
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            handleFiles(e.dataTransfer.files);
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+        
+        function handleFiles(files) {
+            selectedFiles = Array.from(files).filter(f => {
+                const ext = f.name.split('.').pop().toLowerCase();
+                return ['wav', 'mp3', 'flac', 'ogg'].includes(ext);
+            });
+            
+            if (selectedFiles.length === 0) {
+                showError('Please select a valid audio file (WAV, MP3, FLAC, OGG)');
+                return;
+            }
+            
+            if (selectedFiles.length === 1) {
+                const file = selectedFiles[0];
+                fileName.textContent = file.name;
+                fileSize.textContent = formatFileSize(file.size);
+                fileInfo.classList.add('visible');
+                resultFileName.textContent = file.name;
+                
+                const url = URL.createObjectURL(file);
+                audioPlayer.src = url;
+            } else {
+                fileName.textContent = `${selectedFiles.length} files selected`;
+                fileSize.textContent = '';
+                fileInfo.classList.add('visible');
+                resultFileName.textContent = `${selectedFiles.length} files`;
+                audioPlayer.src = '';
+            }
+            
+            analyzeBtn.disabled = false;
+            hideError();
+            resultsSection.classList.remove('visible');
+        }
+        
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorMessage.classList.add('visible');
+        }
+        
+        function hideError() {
+            errorMessage.classList.remove('visible');
+        }
+        
+        analyzeBtn.addEventListener('click', async () => {
+            if (selectedFiles.length === 0) return;
+            
+            analyzeBtn.disabled = true;
+            analyzeBtn.classList.add('loading');
+            hideError();
+            resultsSection.classList.remove('visible');
+            
+            const formData = new FormData();
+            const endpoint = selectedFiles.length === 1 ? '/predict' : '/predict_batch';
+            const fieldName = selectedFiles.length === 1 ? 'file' : 'files';
+            selectedFiles.forEach(f => formData.append(fieldName, f));
+            
+            try {
+                const response = await fetch(`${API_URL}${endpoint}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                let responseText = '';
+                let data = null;
+                
+                try {
+                    responseText = await response.text();
+                    console.log('Raw response:', responseText.substring(0, 500));
+                    data = JSON.parse(responseText);
+                } catch (parseErr) {
+                    console.error('Parse error:', parseErr, 'Response:', responseText);
+                    throw new Error(`Server returned invalid JSON: ${responseText.substring(0, 300)}`);
+                }
+                
+                if (!response.ok) {
+                    const msg = data?.detail || data?.message || data?.error || `HTTP ${response.status}: ${responseText.substring(0, 300)}`;
+                    throw new Error(msg);
+                }
+                
+                if (selectedFiles.length === 1) {
+                    displaySingleResult(data);
+                } else {
+                    displayBatchResults(data.results);
+                }
+                
+                resultsSection.classList.add('visible');
+                
+            } catch (err) {
+                console.error('Analysis error:', err, err?.stack);
+                let errorMsg = '';
+                if (err instanceof Error) {
+                    errorMsg = err.message;
+                } else if (typeof err === 'object' && err !== null) {
+                    try {
+                        errorMsg = JSON.stringify(err);
+                    } catch {
+                        errorMsg = 'Unknown error object';
+                    }
+                } else {
+                    errorMsg = String(err);
+                }
+                showError(errorMsg || 'Unknown error occurred');
+            } finally {
+                analyzeBtn.disabled = false;
+                analyzeBtn.classList.remove('loading');
+            }
+        });
+        
+        // ===== Friendly UI helpers =====
+        function computeHealthScore(error, threshold) {
+            // Map error/threshold ratio to intuitive 0-100 health score
+            // ratio 0 -> 100 (perfect), ratio 1 -> 50 (at warning line), ratio >= 2 -> 0 (faulty)
+            if (!threshold || threshold <= 0) return 50;
+            const ratio = error / threshold;
+            return Math.max(0, Math.min(100, 100 * (1 - ratio / 2)));
+        }
+
+        function setGaugeNeedle(error, threshold) {
+            const needle = document.getElementById('gaugeNeedle');
+            if (!needle || !threshold) return;
+            const ratio = error / threshold;
+            // -80 deg = far left (very healthy), 0 = up (warning line), +80 = far right (faulty)
+            const clampedRatio = Math.max(0, Math.min(2, ratio));
+            const angle = -80 + clampedRatio * 80;
+            needle.setAttribute('transform', `rotate(${angle} 200 130)`);
+        }
+
+        function setScoreRing(score, color) {
+            const arc = document.getElementById('scoreArc');
+            if (!arc) return;
+            const circumference = 264; // 2*pi*r for r=42
+            arc.style.strokeDashoffset = circumference * (1 - score / 100);
+            arc.setAttribute('stroke', color);
+        }
+
+        function displaySingleResult(data) {
+            try {
+                singleResult.style.display = 'block';
+                batchResults.classList.remove('visible');
+                document.getElementById('batchSummary').style.display = 'none';
+
+                const error = Number(data.reconstruction_error) || 0;
+                const threshold = Number(data.threshold) || 0;
+                const confidence = Number(data.confidence) || 0;
+                const isFaulty = Boolean(data.is_faulty);
+                const score = computeHealthScore(error, threshold);
+                const ratio = threshold > 0 ? error / threshold : 1;
+
+                // Status badge (kept small, top-right)
+                statusBadge.textContent = data.status || (isFaulty ? 'FAULTY' : 'NORMAL');
+                statusBadge.className = 'status-badge ' + (isFaulty ? 'faulty' : 'normal');
+
+                // Verdict banner
+                const banner = document.getElementById('verdictBanner');
+                const icon = document.getElementById('verdictIcon');
+                const title = document.getElementById('verdictTitle');
+                const subtitle = document.getElementById('verdictSubtitle');
+                const explanation = document.getElementById('explanationText');
+
+                let stateClass, emoji, heading, subText, explainText;
+
+                if (isFaulty && score < 25) {
+                    stateClass = 'faulty';
+                    emoji = '🔴';
+                    heading = 'Fault Detected';
+                    subText = 'This fan shows clear signs of abnormal sound patterns.';
+                    explainText = '<strong>What we found:</strong> The AI compared your recording against thousands of healthy fan sounds and found significant differences. This often points to issues like worn bearings, loose parts, or blade damage.<br><br><strong>What you should do:</strong> Schedule an inspection soon — catching problems early prevents bigger failures.';
+                } else if (isFaulty) {
+                    stateClass = 'faulty';
+                    emoji = '⚠️';
+                    heading = 'Unusual Sound Detected';
+                    subText = 'Some patterns in this recording look abnormal.';
+                    explainText = '<strong>What we found:</strong> There are irregularities in the sound that differ from a healthy fan. This could be early-stage wear or temporary interference.<br><br><strong>What you should do:</strong> Monitor this fan and re-check with another recording. If the alert repeats, plan a maintenance check.';
+                } else if (ratio > 0.85) {
+                    stateClass = 'warning';
+                    emoji = '🟡';
+                    heading = 'Mostly Normal';
+                    subText = 'Sounds close to normal, but slightly outside the typical range.';
+                    explainText = '<strong>What we found:</strong> Your fan sounds almost normal, but the pattern is near the edge of our healthy range. This is usually nothing urgent.<br><br><strong>What you should do:</strong> No action needed now — re-checking later is a good habit for early problem spotting.';
+                } else {
+                    stateClass = 'healthy';
+                    emoji = '✅';
+                    heading = 'Fan Sounds Healthy!';
+                    subText = 'The audio pattern matches normal fan operation. No issues detected.';
+                    explainText = '<strong>What we found:</strong> Great news — your fan\'s sound signature closely matches what a perfectly healthy fan should sound like.<br><br><strong>What you should do:</strong> Nothing! Keep using your fan as usual.';
+                }
+
+                banner.className = 'verdict-banner ' + stateClass;
+                icon.textContent = emoji;
+                title.textContent = heading;
+                subtitle.textContent = subText;
+                explanation.innerHTML = explainText;
+
+                // Health score ring
+                const ringColor = stateClass === 'healthy' ? '#2dd4a7' : stateClass === 'warning' ? '#ffa502' : '#ff6b7d';
+                setScoreRing(score, ringColor);
+                document.getElementById('healthScore').textContent = Math.round(score);
+
+                // Gauge needle
+                setGaugeNeedle(error, threshold);
+
+                // Technical details (collapsed section)
+                errorValue.textContent = error.toFixed(6);
+                errorValue.className = 'metric-value ' + (isFaulty ? 'warning' : 'success');
+                thresholdValue.textContent = threshold.toFixed(6);
+                confidenceValue.textContent = (confidence * 100).toFixed(1) + '%';
+                confidenceValue.className = 'metric-value ' + (isFaulty ? 'warning' : 'success');
+
+                const progressPercent = Math.min((error / (threshold * 2)) * 100, 100);
+                progressFill.style.width = progressPercent + '%';
+                progressFill.className = 'progress-fill ' +
+                    (progressPercent > 80 ? 'danger' : progressPercent > 50 ? 'warning' : '');
+            } catch (err) {
+                console.error('displaySingleResult error:', err);
+                showError('Display error: ' + (err.message || String(err)));
+            }
+        }
+
+        function fileVerdictFor(r) {
+            if (r.error) return { emoji: '❓', label: 'Error', cls: 'faulty', pct: 0, color: '#8892b0' };
+            const score = computeHealthScore(Number(r.reconstruction_error) || 0, Number(r.threshold) || 1);
+            if (r.is_faulty) {
+                return { emoji: '⚠️', label: 'Unusual', pct: score, color: '#ff6b7d' };
+            } else if (score > 42) {
+                return { emoji: '✅', label: 'Healthy', pct: score, color: '#2dd4a7' };
+            } else {
+                return { emoji: '🟡', label: 'Borderline OK', pct: score, color: '#ffa502' };
+            }
+        }
+
+        function displayBatchResults(results) {
+            singleResult.style.display = 'none';
+            batchResults.classList.add('visible');
+            document.getElementById('batchSummary').style.display = 'block';
+
+            batchCount.textContent = `${results.length} files`;
+            batchList.innerHTML = '';
+
+            let healthy = 0, unusual = 0, errors = 0;
+
+            results.forEach(r => {
+                const v = fileVerdictFor(r);
+                if (r.error) errors++;
+                else if (v.label === 'Healthy') healthy++;
+                else unusual++;
+
+                const name = (r.filename || 'file').replace(/</g, '&lt;');
+                batchList.innerHTML += `
+                    <div class="batch-item">
+                        <div class="batch-verdict-emoji">${v.emoji}</div>
+                        <div class="batch-main">
+                            <div class="batch-name">${name}</div>
+                            <div class="batch-mini-bar"><div class="batch-mini-bar-fill" style="width:${Math.round(v.pct)}%; background:${v.color};"></div></div>
+                        </div>
+                        <span class="batch-verdict-label" style="color:${v.color};">${v.label}</span>
+                    </div>
+                `;
+            });
+
+            // Summary banner
+            const bIcon = document.getElementById('batchVerdictIcon');
+            const bTitle = document.getElementById('batchVerdictTitle');
+            const bSub = document.getElementById('batchVerdictSubtitle');
+            const banner = document.getElementById('batchSummary').querySelector('.verdict-banner');
+
+            if (errors === results.length) {
+                banner.className = 'verdict-banner warning';
+                bIcon.textContent = '❓'; 
+                bTitle.textContent = 'Could not analyze files';
+                bSub.textContent = 'Something went wrong processing all uploads.';
+            } else if (unusual === 0 && errors === 0) {
+                banner.className = 'verdict-banner healthy';
+                bIcon.textContent = '🎉';
+                bTitle.textContent = `All ${healthy} fans sound healthy!`;
+                bSub.textContent = 'Every uploaded recording matched normal fan operation.';
+            } else if (healthy === 0 && errors === 0) {
+                banner.className = 'verdict-banner faulty';
+                bIcon.textContent = '⚠️';
+                bTitle.textContent = `${unusual} of ${unusual} fans need attention`;
+                bSub.textContent = 'All recordings showed unusual sound patterns.';
+            } else {
+                banner.className = 'verdict-banner warning';
+                bIcon.textContent = '📊';
+                bTitle.textContent = `${unusual} fan${unusual !== 1 ? 's' : ''} flagged out of ${results.length}`;
+                bSub.textContent = `${healthy} healthy · ${unusual} with unusual sounds${errors ? ` · ${errors} failed` : ''}. Check flagged items below.`;
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                // Support both old (model_loaded) and new (per_id_models_loaded) API formats
+                const loaded = data.model_loaded || (data.per_id_models_loaded > 0) || data.global_model_loaded;
+                if (!loaded) {
+                    showError('Model not loaded. Please check server.');
+                    analyzeBtn.disabled = true;
+                }
+            } catch (err) {
+                showError('Cannot connect to server. Is the API running?');
+                analyzeBtn.disabled = true;
+            }
+        });
+    </script>
+</body>
+</html>

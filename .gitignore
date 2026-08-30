@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# Model checkpoints
+checkpoints/*.pth
+*.pt
+*.bin
+
+# Data
+data/raw/
+data/processed/
+*.wav
+*.mp3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# OS
+.DS_Store
