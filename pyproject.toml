@@ -1,0 +1,7 @@
+[project]
+name = "fan-fault-detection"
+version = "3.1.0"
+description = "Fan fault detection from audio using deep learning"
+
+[tool.vercel]
+entrypoint = "src.api:app"
