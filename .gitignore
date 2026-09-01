@@ -4,8 +4,8 @@ __pycache__/
 venv/
 .env
 
-# Model checkpoints
-checkpoints/*.pth
+# Model checkpoints (committed for Docker builds)
+# checkpoints/*.pth
 *.pt
 *.bin
 
