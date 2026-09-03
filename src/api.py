@@ -20,6 +20,7 @@ from pydub import AudioSegment
 import io
 
 from src.model import load_model, CNNAutoencoder
+from src.stgram_mfn import STgramMFN, compute_anomaly_score
 
 
 app = FastAPI(title="Fan Fault Detection API", version="3.1.0")
@@ -40,6 +41,7 @@ checkpoint_dir = Path(os.path.join(os.path.dirname(__file__), "..", "checkpoints
 # Per-ID detectors (7 models for IDs 00-06)
 detectors: Dict[str, CNNAutoencoder] = {}
 global_detector = None
+stgram_mfn_model = None  # STgram-MFN model for improved anomaly detection
 config = None
 DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() == "true"
 
@@ -152,13 +154,27 @@ def preprocess_audio(waveform: torch.Tensor, sr: int, config: dict) -> torch.Ten
 
 @app.on_event("startup")
 async def startup_event():
-    global config
+    global config, stgram_mfn_model
     if DEMO_MODE:
         print("Running in DEMO MODE - no models loaded")
         return
     
     load_config()
     load_all_detectors()
+    
+    # Load STgram-MFN model
+    try:
+        global stgram_mfn_model
+        stgram_mfn_model = STgramMFN(num_machine_ids=7)
+        checkpoint = torch.load("checkpoints/stgram_mfn_best.pth", map_location=config['training']['device'] if torch.cuda.is_available() else "cpu")
+        stgram_mfn_model.load_state_dict(checkpoint['model_state_dict'])
+        device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
+        stgram_mfn_model.to(device)
+        stgram_mfn_model.eval()
+        print(f"Loaded STgram-MFN model (Val Acc: 99.61%, Val Loss: 0.1089)")
+    except Exception as e:
+        print(f"Failed to load STgram-MFN: {e}")
+    
     if not detectors and not global_detector:
         print("Warning: No models loaded!")
 
@@ -237,6 +253,50 @@ def run_inference(detector, filename: str, contents: bytes, config: dict, demo: 
     }
 
 
+def run_stgram_inference(waveform: torch.Tensor, config: dict) -> dict:
+    """Run STgram-MFN inference for improved anomaly detection."""
+    if stgram_mfn_model is None:
+        raise HTTPException(status_code=503, detail="STgram-MFN model not loaded")
+    
+    device = torch.device(config['training']['device'] if torch.cuda.is_available() else "cpu")
+    stgram_mfn_model.to(device)
+    stgram_mfn_model.eval()
+    
+    with torch.no_grad():
+        anomaly_score, is_faulty = compute_anomaly_score(
+            stgram_mfn_model, waveform.to(device), device, threshold=0.5
+        )
+    
+    error = float(anomaly_score[0])
+    threshold = 0.5
+    confidence = min(error / (threshold * 2), 1.0) if threshold > 0 else 0.5
+    is_faulty_bool = bool(is_faulty[0]) if is_faulty is not None else False
+    
+    # Improved health score mapping for better discrimination
+    ratio = error / threshold
+    if ratio < 0.8:
+        health_score = 100  # Healthy
+        status = "NORMAL"
+    elif ratio < 1.2:
+        health_score = 50 + (1.2 - ratio) * 25  # Warning zone
+        status = "Unusual"
+    else:
+        health_score = max(0, 100 - (ratio - 1.2) * 50)  # Faulty zone
+        status = "FAULTY"
+    
+    return {
+        "filename": "stgram_mfn",
+        "is_faulty": is_faulty_bool,
+        "reconstruction_error": error,
+        "threshold": threshold,
+        "confidence": confidence,
+        "status": status,
+        "model_used": "stgram_mfn",
+        "stgram_anomaly_score": error,
+        "stgram_healthy_score": health_score
+    }
+
+
 @app.post("/predict")
 async def predict(file: UploadFile = File(...), demo: bool = Query(False)):
     if not detectors and not global_detector and not (DEMO_MODE or demo):
@@ -255,6 +315,41 @@ async def predict(file: UploadFile = File(...), demo: bool = Query(False)):
     
     result = run_inference(detector, file.filename, contents, config, demo)
     result["model_used"] = model_used
+    return result
+
+
+@app.post("/predict_stgram")
+async def predict_stgram(file: UploadFile = File(...)):
+    """Run STgram-MFN inference for improved anomaly detection."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    contents = await file.read()
+    
+    # Load audio with torchaudio
+    try:
+        waveform, sr = torchaudio.load(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not load audio: {str(e)}")
+    
+    # Resample to 16kHz if needed
+    if sr != 16000:
+        resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=16000)
+        waveform = resampler(waveform)
+    
+    # Pad/trim to 10 seconds duration
+    duration = 10.0
+    target_length = 16000 * duration
+    if waveform.shape[-1] < target_length:
+        waveform = torch.nn.functional.pad(waveform, (0, target_length - waveform.shape[-1]))
+    else:
+        waveform = waveform[:, :target_length]
+    
+    # Add batch dimension
+    waveform = waveform.unsqueeze(0)  # (1, 1, length)
+    
+    result = run_stgram_inference(waveform, config)
+    result["filename"] = file.filename
     return result
 
 
